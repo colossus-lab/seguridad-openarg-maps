@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import type { Dataset, Metric, Nivel } from "./types";
 
+type IntroState = "loading" | "ready" | "done";
+
 type State = {
   dataset: Dataset | null;
   nivel: Nivel;
@@ -9,12 +11,14 @@ type State = {
   delitoId: string;
   anio: number;
   metric: Metric;
+  intro: IntroState;
   setDataset: (d: Dataset) => void;
   setDelito: (id: string) => void;
   setAnio: (a: number) => void;
   setMetric: (m: Metric) => void;
   selectProvincia: (id: string | null) => void;
   selectDepartamento: (id: string | null) => void;
+  setIntro: (s: IntroState) => void;
   reset: () => void;
 };
 
@@ -26,6 +30,7 @@ export const useDashboard = create<State>((set) => ({
   delitoId: "1", // Homicidios dolosos por defecto
   anio: 2024,
   metric: "tasa",
+  intro: "loading",
   setDataset: (d) => set((s) => ({
     dataset: d,
     anio: d.anios[d.anios.length - 1] ?? s.anio,
@@ -40,5 +45,6 @@ export const useDashboard = create<State>((set) => ({
     departamentoSel: null,
   }),
   selectDepartamento: (id) => set({ departamentoSel: id }),
+  setIntro: (s) => set({ intro: s }),
   reset: () => set({ nivel: "pais", provinciaSel: null, departamentoSel: null }),
 }));

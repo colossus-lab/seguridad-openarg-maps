@@ -69,25 +69,47 @@ export default function Vista3DPais() {
       .finally(() => setLoadingProv(false));
   }, [provinciaSel]);
 
-  // FlyTo a la provincia seleccionada.
+  // FlyTo a la provincia seleccionada — secuencia cinematográfica en dos fases.
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !paisGeo) return;
+    const easeOutQuart = (t: number) => 1 - Math.pow(1 - t, 4);
     if (provinciaSel) {
       const prov = paisGeo.features.find((f) => f.properties?.provincia_id === provinciaSel);
       if (prov) {
         const bbox = bboxOf(prov);
-        map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], {
-          padding: 80, pitch: viewMode === "3d" ? 58 : 0, bearing: -8, duration: 1600,
-          easing: (t) => 1 - Math.pow(1 - t, 3),
+        const cx = (bbox[0] + bbox[2]) / 2;
+        const cy = (bbox[1] + bbox[3]) / 2;
+        // Fase 1: pull-back con tilt fuerte y rotación
+        map.easeTo({
+          center: [cx, cy],
+          zoom: Math.max(map.getZoom() - 0.6, 3.4),
+          pitch: viewMode === "3d" ? 72 : 0,
+          bearing: -28,
+          duration: 380,
+          easing: (t) => t * t,
         });
+        // Fase 2: fitBounds dramático
+        setTimeout(() => {
+          map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], {
+            padding: 60, pitch: viewMode === "3d" ? 62 : 0, bearing: -12, duration: 1500,
+            easing: easeOutQuart, maxZoom: 12,
+          });
+        }, 380);
       }
     } else {
+      // Volver al país en dos fases (zoom-in→reset)
       map.easeTo({
-        center: [-63.5, -38.5], zoom: 3.7,
-        pitch: viewMode === "3d" ? 48 : 0, bearing: 0, duration: 1400,
-        easing: (t) => 1 - Math.pow(1 - t, 3),
+        zoom: map.getZoom() + 0.4, pitch: viewMode === "3d" ? 70 : 0, bearing: 12, duration: 320,
+        easing: (t) => t * t,
       });
+      setTimeout(() => {
+        map.easeTo({
+          center: [-63.5, -38.5], zoom: 3.85,
+          pitch: viewMode === "3d" ? 52 : 0, bearing: 0, duration: 1400,
+          easing: easeOutQuart,
+        });
+      }, 320);
     }
   }, [provinciaSel, paisGeo]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -240,7 +262,7 @@ export default function Vista3DPais() {
                   key={m}
                   onClick={() => setViewMode(m)}
                   className={[
-                    "px-3 py-1.5 text-[11.5px] font-semibold uppercase tracking-wider transition",
+                    "press-feedback px-3 py-1.5 text-[11.5px] font-semibold uppercase tracking-wider transition",
                     i === 0 ? "border-r border-line" : "",
                     viewMode === m ? "bg-ink text-paper" : "text-ink-2 hover:text-ink",
                   ].join(" ")}
@@ -275,7 +297,7 @@ export default function Vista3DPais() {
                   key={m}
                   onClick={() => setMetric(m)}
                   className={[
-                    "px-4 py-2.5 text-[13px] font-medium transition",
+                    "press-feedback px-4 py-2.5 text-[13px] font-medium transition",
                     i === 0 ? "border-r border-line" : "",
                     metric === m ? "bg-ink text-paper" : "text-ink-2 hover:text-ink",
                   ].join(" ")}
@@ -291,15 +313,28 @@ export default function Vista3DPais() {
               <span className="eyebrow">Año</span>
               <span className="mono num text-[14px] font-semibold text-ink">{anio}</span>
             </span>
-            <input
-              type="range"
-              min={dataset.anios[0]}
-              max={dataset.anios[dataset.anios.length - 1]}
-              step={1}
-              value={anio}
-              onChange={(e) => setAnio(Number(e.target.value))}
-              className="w-full"
-            />
+            <div className="relative pt-7">
+              <div
+                className="slider-tooltip"
+                style={{
+                  left: `${(
+                    (anio - dataset.anios[0]) /
+                    (dataset.anios[dataset.anios.length - 1] - dataset.anios[0])
+                  ) * 100}%`,
+                }}
+              >
+                {anio}
+              </div>
+              <input
+                type="range"
+                min={dataset.anios[0]}
+                max={dataset.anios[dataset.anios.length - 1]}
+                step={1}
+                value={anio}
+                onChange={(e) => setAnio(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
             <div className="flex justify-between text-[10.5px] text-ink-4 mono num">
               <span>{dataset.anios[0]}</span>
               <span>{dataset.anios[dataset.anios.length - 1]}</span>
@@ -347,9 +382,22 @@ export default function Vista3DPais() {
               ? (viewMode === "3d" ? "hex-pais-3d" : "hex-pais-2d")
               : (viewMode === "3d" ? "hex-prov-3d" : "hex-prov-2d"),
           ]}
-          style={{ height: "100%", width: "100%", background: "#0a1220" }}
+          style={{ height: "100%", width: "100%", background: "#050a14" }}
         >
           <NavigationControl position="top-right" visualizePitch showCompass showZoom />
+
+          {/* Tech grid sutil tipo blueprint */}
+          <Source id="tech-grid" type="geojson" data={buildTechGrid()}>
+            <Layer
+              id="tech-grid-line"
+              type="line"
+              paint={{
+                "line-color": "#00bb7f",
+                "line-opacity": 0.05,
+                "line-width": 0.7,
+              }}
+            />
+          </Source>
 
           {/* === Vista país === */}
           {nivel === "pais" && paisGeo && (
@@ -357,12 +405,18 @@ export default function Vista3DPais() {
               <Layer
                 id="prov-fill-bg"
                 type="fill"
-                paint={{ "fill-color": "#0f1a2a", "fill-opacity": 0.55 }}
+                paint={{ "fill-color": "#0a1422", "fill-opacity": 0.5 }}
+              />
+              {/* Glow exterior ancho */}
+              <Layer
+                id="prov-line-glow-outer"
+                type="line"
+                paint={{ "line-color": "#00d294", "line-width": 8, "line-opacity": 0.08, "line-blur": 4 }}
               />
               <Layer
                 id="prov-line-glow"
                 type="line"
-                paint={{ "line-color": "#00bb7f", "line-width": 4, "line-opacity": 0.16, "line-blur": 2 }}
+                paint={{ "line-color": "#00bb7f", "line-width": 3.5, "line-opacity": 0.22, "line-blur": 1.5 }}
               />
               <Layer
                 id="prov-line"
@@ -370,15 +424,15 @@ export default function Vista3DPais() {
                 paint={{
                   "line-color": [
                     "case",
-                    ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], "#00ffaa",
-                    "#00bb7f",
+                    ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], "#7fffd4",
+                    "#00d294",
                   ],
                   "line-width": [
                     "case",
-                    ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], 2.4,
-                    1.4,
+                    ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], 2.2,
+                    1.1,
                   ],
-                  "line-opacity": 0.9,
+                  "line-opacity": 0.95,
                 }}
               />
             </Source>
@@ -386,15 +440,34 @@ export default function Vista3DPais() {
 
           {nivel === "pais" && hexPaisEnriched && (
             <Source id="hex-pais" type="geojson" data={hexPaisEnriched}>
+              {/* Capa glow plana — halo emisor debajo de la extrusión */}
+              <Layer
+                id="hex-pais-glow"
+                type="fill"
+                paint={{
+                  "fill-color": colorInterpolate(),
+                  "fill-opacity": 0.18,
+                  "fill-antialias": true,
+                }}
+              />
               {viewMode === "3d" ? (
                 <Layer
                   id="hex-pais-3d"
                   type="fill-extrusion"
                   paint={{
-                    "fill-extrusion-height": ["get", "height"],
+                    "fill-extrusion-height": [
+                      "case",
+                      ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"],
+                      ["*", ["get", "height"], 1.18],
+                      ["get", "height"],
+                    ],
                     "fill-extrusion-base": 0,
                     "fill-extrusion-color": colorInterpolate(),
-                    "fill-extrusion-opacity": 0.75,
+                    "fill-extrusion-opacity": [
+                      "case",
+                      ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], 0.92,
+                      0.78,
+                    ],
                     "fill-extrusion-vertical-gradient": true,
                   }}
                 />
@@ -404,7 +477,11 @@ export default function Vista3DPais() {
                   type="fill"
                   paint={{
                     "fill-color": colorInterpolate(),
-                    "fill-opacity": 0.82,
+                    "fill-opacity": [
+                      "case",
+                      ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], 0.95,
+                      0.85,
+                    ],
                   }}
                 />
               )}
@@ -636,6 +713,19 @@ export default function Vista3DPais() {
 
 /* ====================  Helpers  ==================== */
 
+/** Tech grid líneas cada 1° (~110 km) sobre toda Argentina continental. */
+function buildTechGrid(): GeoJSON.FeatureCollection {
+  const minX = -74, maxX = -53, minY = -56, maxY = -21, step = 1;
+  const features: GeoJSON.Feature[] = [];
+  for (let x = Math.ceil(minX / step) * step; x <= maxX; x += step) {
+    features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[x, minY], [x, maxY]] } });
+  }
+  for (let y = Math.ceil(minY / step) * step; y <= maxY; y += step) {
+    features.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[minX, y], [maxX, y]] } });
+  }
+  return { type: "FeatureCollection", features };
+}
+
 function bboxOf(feature: GeoJSON.Feature): [number, number, number, number] {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const walk = (c: any) => {
@@ -658,25 +748,28 @@ function enrichHexgrid(
   const MAX_HEIGHT = 90000; // unidades del mapa (proyección Mercator)
   const rawValues = fc.features.map((f) => getValue(f.properties as HexProps));
 
-  // Smoothing por vecinos baked en el geojson (build-hexgrid-pais.mjs).
-  // Para cada celda: 0.55 propio + 0.075 × 6 vecinos. Bordes (n<6): redistribuye.
+  // Smoothing por vecinos baked en el geojson — DOBLE PASADA para gradiente muy soft.
+  // Cada pasada: 0.45 propio + 0.55 distribuido entre 6 vecinos.
   let values = rawValues;
   if (smooth) {
-    const smoothed = new Array(rawValues.length);
-    for (let i = 0; i < fc.features.length; i++) {
-      const neighbors = ((fc.features[i].properties as HexProps).n) ?? [];
-      const k = neighbors.length;
-      if (k === 0) { smoothed[i] = rawValues[i]; continue; }
-      let s = rawValues[i] * 0.55;
-      let wTotal = 0.55;
-      const wEach = 0.45 / Math.max(1, k);
-      for (const nIdx of neighbors) {
-        s += rawValues[nIdx] * wEach;
-        wTotal += wEach;
+    const blur = (input: number[]) => {
+      const out = new Array(input.length);
+      for (let i = 0; i < fc.features.length; i++) {
+        const neighbors = ((fc.features[i].properties as HexProps).n) ?? [];
+        const k = neighbors.length;
+        if (k === 0) { out[i] = input[i]; continue; }
+        let s = input[i] * 0.45;
+        let wTotal = 0.45;
+        const wEach = 0.55 / Math.max(1, k);
+        for (const nIdx of neighbors) {
+          s += input[nIdx] * wEach;
+          wTotal += wEach;
+        }
+        out[i] = s / wTotal;
       }
-      smoothed[i] = s / wTotal;
-    }
-    values = smoothed;
+      return out;
+    };
+    values = blur(blur(rawValues));
   }
 
   let globalMax = 0;
@@ -717,13 +810,13 @@ function enrichHexgrid(
 function colorInterpolate(): any {
   return [
     "interpolate", ["linear"], ["get", "intensity"],
-    0, "#062a1f",
-    0.15, "#007956",
-    0.35, "#00bb7f",
-    0.55, "#edb200",
-    0.75, "#f97316",
-    0.9, "#dc2626",
-    1, "#7f1d1d",
+    0,    "#0a3d2e",
+    0.18, "#10a37a",
+    0.38, "#34d399",
+    0.55, "#facc15",
+    0.72, "#fb923c",
+    0.88, "#dc2626",
+    1,    "#7c2d12",
   ];
 }
 

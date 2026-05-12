@@ -10,7 +10,7 @@ const IN_PROV = path.join(process.cwd(), "public", "data", "pais.geojson");
 const IN_DEP_DIR = path.join(process.cwd(), "public", "data", "departamentos");
 const OUT = path.join(process.cwd(), "public", "data", "hexgrid-pais.geojson");
 
-const CELL_KM = Number(process.env.HEX_KM ?? 15);
+const CELL_KM = Number(process.env.HEX_KM ?? 5);
 const DEC = 4;
 
 // Bbox de Argentina continental (sin Antártida).
