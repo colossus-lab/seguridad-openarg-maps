@@ -14,8 +14,11 @@ export default function DashboardShell() {
 
   if (!dataset) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-paper text-ink-3">
-        <span className="eyebrow">Cargando datos SNIC…</span>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 pulse-dot" />
+          <span className="eyebrow text-ink-3">Inicializando observatorio…</span>
+        </div>
       </div>
     );
   }
@@ -24,68 +27,82 @@ export default function DashboardShell() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line-subtle bg-paper/80 backdrop-blur">
-        <div className="mx-auto flex max-w-[1240px] items-center justify-between px-6 py-3">
+      {/* Top bar institucional */}
+      <header className="sticky top-0 z-30 border-b border-line-subtle bg-paper/75 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1320px] items-center justify-between px-8 py-3.5">
           <div className="flex items-center gap-3">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink">
+            <span className="relative inline-flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75 pulse-dot" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.22em] text-ink">
               Colossus Lab
             </span>
             <span className="h-3 w-px bg-line" />
-            <span className="text-[11px] uppercase tracking-[0.18em] text-ink-3">
-              Observatorio · Seguridad · República Argentina
+            <span className="text-[10.5px] uppercase tracking-[0.22em] text-ink-3">
+              Observatorio · Seguridad
             </span>
           </div>
-          <nav className="flex items-center gap-5 text-[12px] text-ink-2">
-            <a href="https://www.colossuslab.org" target="_blank" rel="noreferrer" className="hover:text-ink">colossuslab.org</a>
+          <nav className="flex items-center gap-6 text-[11.5px] text-ink-2">
+            <a href="https://www.colossuslab.org" target="_blank" rel="noreferrer" className="transition hover:text-ink">
+              colossuslab.org
+            </a>
             <a
               href="https://www.argentina.gob.ar/seguridad/estadisticascriminales"
               target="_blank"
               rel="noreferrer"
-              className="hover:text-ink"
+              className="transition hover:text-ink"
             >
-              Fuente SNIC
+              Fuente SNIC ↗
             </a>
           </nav>
         </div>
       </header>
 
-      <section className="border-b border-line-subtle">
-        <div className="mx-auto max-w-[1240px] px-6 py-7 md:py-10">
-          <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_300px] md:items-end">
+      {/* Hero institucional */}
+      <section className="relative overflow-hidden border-b border-line-subtle">
+        <div className="absolute inset-0 paper-grid opacity-[0.35]" />
+        <div className="relative mx-auto max-w-[1320px] px-8 py-12 md:py-16">
+          <div className="anim-fade-up grid gap-10 md:grid-cols-[minmax(0,1fr)_320px] md:items-end">
             <div>
-              <div className="eyebrow mb-2">Open Arg · Panel Nacional</div>
-              <h1 className="text-[26px] font-semibold leading-[1.05] tracking-tight md:text-[36px]">
+              <div className="eyebrow mb-3 text-emerald-700">
+                Open Arg · Panel Nacional · SNIC 2000–2024
+              </div>
+              <h1 className="text-[40px] font-semibold leading-[0.98] tracking-[-0.025em] text-ink md:text-[56px]">
                 Mapa de inseguridad
-                <span className="block text-ink-3">República Argentina</span>
+                <span className="block bg-gradient-to-r from-ink via-ink-2 to-ink-3 bg-clip-text text-transparent">
+                  República Argentina
+                </span>
               </h1>
-              <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-ink-2">
-                Visualización 3D del SNIC para las 24 provincias y los {dataset.departamentos.length} departamentos
-                del país. Al hacer click en una provincia se carga un hexgrid fino que detalla
-                la métrica a nivel departamental. Datos oficiales del Ministerio de Seguridad de la Nación.
+              <p className="mt-5 max-w-2xl text-[14px] leading-relaxed text-ink-2">
+                Observatorio interactivo 3D del Sistema Nacional de Información Criminal para las{" "}
+                <strong className="text-ink">24 provincias</strong> y los{" "}
+                <strong className="text-ink">{dataset.departamentos.length} departamentos</strong> de
+                Argentina. Hacé click sobre una provincia para hacer drill-down al detalle departamental
+                con un hexgrid de mayor resolución.
               </p>
             </div>
-            <dl className="grid grid-cols-3 gap-4 border-l border-line-subtle pl-6 md:grid-cols-1 md:gap-2.5">
-              <Meta label="Cobertura" value={`${dataset.provincias.length} provincias`} />
-              <Meta label="Serie temporal" value={rango} />
-              <Meta label="Delitos cubiertos" value={`${dataset.delitos.length} categorías`} />
+            <dl className="grid grid-cols-3 gap-3 border-l border-line-subtle pl-8 md:grid-cols-1 md:gap-4">
+              <Meta label="Cobertura" big={`${dataset.provincias.length}`} suffix="provincias" detail={`${dataset.departamentos.length} departamentos`} />
+              <Meta label="Serie temporal" big={`${dataset.anios.length}`} suffix="años" detail={rango} />
+              <Meta label="Categorías" big={`${dataset.delitos.length}`} suffix="delitos" detail="SNIC + SAT viales" />
             </dl>
           </div>
         </div>
       </section>
 
-      <main className="mx-auto max-w-[1240px] px-6 py-8">
+      <main className="mx-auto max-w-[1320px] px-8 py-10">
         <Vista3DPais />
       </main>
 
-      <footer className="mt-10 border-t border-line-subtle">
-        <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-3 px-6 py-6 text-[12px] text-ink-3">
+      <footer className="mt-12 border-t border-line-subtle bg-paper/40">
+        <div className="mx-auto flex max-w-[1320px] flex-wrap items-center justify-between gap-3 px-8 py-7 text-[11.5px] text-ink-3">
           <div>
             Elaborado por <span className="font-semibold text-ink">Colossus Lab</span> · Datos oficiales
-            del Ministerio de Seguridad de la Nación (SNIC + SAT).
+            del Ministerio de Seguridad de la Nación (SNIC + SAT) · Geometrías IGN
           </div>
-          <div className="mono">
-            {new Date(dataset.meta.generado).toISOString().slice(0, 10)}
+          <div className="mono text-[10.5px]">
+            build {new Date(dataset.meta.generado).toISOString().slice(0, 10)}
           </div>
         </div>
       </footer>
@@ -93,11 +110,15 @@ export default function DashboardShell() {
   );
 }
 
-function Meta({ label, value }: { label: string; value: string }) {
+function Meta({ label, big, suffix, detail }: { label: string; big: string; suffix: string; detail: string }) {
   return (
     <div>
       <div className="eyebrow">{label}</div>
-      <div className="mt-1 text-[15px] font-semibold text-ink num">{value}</div>
+      <div className="mt-1 flex items-baseline gap-1.5">
+        <div className="num text-[26px] font-semibold leading-none tracking-tight text-ink">{big}</div>
+        <div className="text-[11px] text-ink-3">{suffix}</div>
+      </div>
+      <div className="mt-1 text-[10.5px] text-ink-3 mono">{detail}</div>
     </div>
   );
 }

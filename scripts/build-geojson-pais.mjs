@@ -51,9 +51,24 @@ function main() {
     // IGN: properties.in1 (id INDEC), properties.nam (nombre).
     const id = pad2(f.properties.in1 ?? f.properties.id);
     const nombre = f.properties.nam ?? f.properties.fna ?? f.properties.nombre;
-    // Douglas-Peucker primero (tolerance en grados, ~0.01° ≈ 1.1 km).
+    let geom = f.geometry;
+    // Clip Tierra del Fuego — descartamos polígonos al sur de -56° (Antártida + islas).
+    if (id === "94" && geom.type === "MultiPolygon") {
+      const minLatOfPoly = (poly) => {
+        let m = Infinity;
+        const walk = (c) => {
+          if (typeof c[0] === "number") { if (c[1] < m) m = c[1]; return; }
+          c.forEach(walk);
+        };
+        walk(poly);
+        return m;
+      };
+      const parts = geom.coordinates.filter((poly) => minLatOfPoly(poly) >= -56);
+      if (parts.length > 0) geom = { type: parts.length === 1 ? "Polygon" : "MultiPolygon", coordinates: parts.length === 1 ? parts[0] : parts };
+    }
+    // Douglas-Peucker (tolerance en grados, ~0.01° ≈ 1.1 km).
     const simplified = turf.simplify(
-      { type: "Feature", properties: {}, geometry: f.geometry },
+      { type: "Feature", properties: {}, geometry: geom },
       { tolerance: 0.01, highQuality: false, mutate: false },
     );
     const rounded = roundCoords(simplified.geometry.coordinates);

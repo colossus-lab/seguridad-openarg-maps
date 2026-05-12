@@ -4,9 +4,9 @@
 
 :root {
   --color-bg: #faf8f4;
-  --color-fg-primary: #101215;
-  --color-fg-secondary: #3a3d43;
-  --color-fg-tertiary: #66696f;
+  --color-fg-primary: #0c0e11;
+  --color-fg-secondary: #2a2d33;
+  --color-fg-tertiary: #5b5e64;
   --color-fg-quaternary: #83868e;
   --color-surface-1: #f3f0ea;
   --color-surface-2: #e9e6df;
@@ -24,37 +24,59 @@
   --color-success: #10b981;
   --color-warning: #edb200;
   --color-grid: #0043951f;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 html, body { height: 100%; }
 body {
-  background: linear-gradient(#fbf8f2 0%, #f8f5ee 45%, #f4efe7 100%) fixed;
+  background:
+    radial-gradient(1200px 600px at 20% -10%, #f8f3e8 0%, transparent 60%),
+    radial-gradient(900px 500px at 90% 10%, #f4eee0 0%, transparent 55%),
+    linear-gradient(#fbf8f2 0%, #f6f1e6 100%) fixed;
   color: var(--color-fg-primary);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-feature-settings: "ss01", "ss03", "cv05", "cv11", "calt";
-  letter-spacing: -0.006em;
+  letter-spacing: -0.011em;
   font-size: 15px;
   line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4 { letter-spacing: -0.018em; }
+h1, h2, h3, h4 { letter-spacing: -0.022em; font-weight: 600; }
 .eyebrow {
   text-transform: uppercase;
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
-  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  font-weight: 600;
   color: var(--color-fg-tertiary);
 }
 .num { font-variant-numeric: tabular-nums; }
-.mono { font-family: var(--font-mono); }
+.mono { font-family: var(--font-mono), ui-monospace, "JetBrains Mono", Consolas, monospace; }
 
 .paper-grid {
   background-image:
     linear-gradient(var(--color-grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
   background-size: 32px 32px;
+}
+
+/* Texturas premium para el mapa */
+.map-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
+  opacity: 0.55;
+}
+.map-vignette::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 90% at 50% 50%, transparent 55%, rgba(0,0,0,0.45) 100%);
+  z-index: 2;
 }
 
 input[type="range"] {
@@ -64,32 +86,32 @@ input[type="range"] {
   height: 20px;
 }
 input[type="range"]::-webkit-slider-runnable-track {
-  background: var(--color-surface-2);
-  height: 2px;
-  border-radius: 2px;
+  background: linear-gradient(90deg, var(--color-surface-2), var(--color-surface-3));
+  height: 3px;
+  border-radius: 3px;
 }
 input[type="range"]::-moz-range-track {
   background: var(--color-surface-2);
-  height: 2px;
-  border-radius: 2px;
+  height: 3px;
+  border-radius: 3px;
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   margin-top: -7px;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 9999px;
-  background: var(--color-emerald-500);
+  background: radial-gradient(circle at 30% 30%, #00d294, #007956);
   border: 2px solid #fbfaf6;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+  box-shadow: 0 2px 6px rgba(0,75,55,0.35);
   cursor: pointer;
 }
 input[type="range"]::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 9999px;
-  background: var(--color-emerald-500);
+  background: radial-gradient(circle at 30% 30%, #00d294, #007956);
   border: 2px solid #fbfaf6;
   cursor: pointer;
 }
@@ -101,6 +123,27 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .maplibregl-ctrl-attrib {
-  background: rgba(255,255,255,0.7) !important;
-  font-size: 10px !important;
+  background: rgba(10,18,32,0.6) !important;
+  color: rgba(255,255,255,0.55) !important;
+  font-size: 9.5px !important;
+  backdrop-filter: blur(6px);
 }
+.maplibregl-ctrl-attrib a { color: rgba(255,255,255,0.75) !important; }
+
+/* Tarjetas glass premium para overlay del mapa */
+.glass-card {
+  background: linear-gradient(135deg, rgba(10,18,32,0.92) 0%, rgba(8,16,28,0.88) 100%);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(0,210,148,0.18);
+  box-shadow:
+    0 12px 36px -16px rgba(0,210,148,0.18),
+    0 0 0 1px rgba(255,255,255,0.04) inset,
+    0 1px 0 rgba(255,255,255,0.06) inset;
+}
+
+/* Animaciones */
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.anim-fade-up { animation: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes pulse-dot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.85); } }
+.pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }

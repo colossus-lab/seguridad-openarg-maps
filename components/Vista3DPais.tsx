@@ -25,7 +25,7 @@ import type { Dataset, Metric } from "@/lib/types";
 
 const BASE_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json";
 
-type HexProps = { provincia_id: string; departamento_id: string | null };
+type HexProps = { provincia_id: string; departamento_id: string | null; n?: number[] };
 
 export default function Vista3DPais() {
   const {
@@ -78,14 +78,15 @@ export default function Vista3DPais() {
       if (prov) {
         const bbox = bboxOf(prov);
         map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], {
-          padding: 80, pitch: viewMode === "3d" ? 55 : 0, bearing: 0, duration: 1200,
+          padding: 80, pitch: viewMode === "3d" ? 58 : 0, bearing: -8, duration: 1600,
+          easing: (t) => 1 - Math.pow(1 - t, 3),
         });
       }
     } else {
-      // Volver al país.
       map.easeTo({
-        center: [-63.5, -38.5], zoom: 3.6,
-        pitch: viewMode === "3d" ? 45 : 0, bearing: 0, duration: 1000,
+        center: [-63.5, -38.5], zoom: 3.7,
+        pitch: viewMode === "3d" ? 48 : 0, bearing: 0, duration: 1400,
+        easing: (t) => 1 - Math.pow(1 - t, 3),
       });
     }
   }, [provinciaSel, paisGeo]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -155,7 +156,7 @@ export default function Vista3DPais() {
   // Hexgrid provincia enriquecido por departamento.
   const hexProvEnriched = useMemo<GeoJSON.FeatureCollection | null>(() => {
     if (!hexProv || valoresDep.size === 0 || nivel !== "provincia") return null;
-    return enrichHexgrid(hexProv, (p) => valoresDep.get(p.departamento_id ?? "") ?? 0);
+    return enrichHexgrid(hexProv, (p) => valoresDep.get(p.departamento_id ?? "") ?? 0, false);
   }, [hexProv, valoresDep, nivel]);
 
   const labelPointsPais = useMemo<GeoJSON.FeatureCollection | null>(() => {
@@ -210,7 +211,7 @@ export default function Vista3DPais() {
   return (
     <div className="flex flex-col gap-4">
       {/* Barra de control */}
-      <section className="rounded-xl border border-line bg-white p-5 shadow-card">
+      <section className="rounded-2xl border border-line-subtle bg-gradient-to-br from-white via-white to-paper/70 p-6 shadow-[0_8px_24px_-16px_rgba(16,18,21,0.12)]">
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3 border-b border-line-subtle pb-3">
           <div className="flex items-baseline gap-5">
             <div>
@@ -308,14 +309,14 @@ export default function Vista3DPais() {
       </section>
 
       {/* Mapa */}
-      <div ref={wrapperRef} className="relative h-[680px] overflow-hidden rounded-xl border border-line shadow-card">
+      <div ref={wrapperRef} className="relative h-[720px] overflow-hidden rounded-2xl border border-emerald-900/30 shadow-[0_24px_60px_-20px_rgba(0,75,55,0.3)] map-vignette map-grain">
         <MapGL
           ref={mapRef}
           initialViewState={{
             longitude: -63.5,
             latitude: -38.5,
-            zoom: 3.6,
-            pitch: 45,
+            zoom: 3.7,
+            pitch: 48,
             bearing: 0,
           }}
           mapStyle={BASE_STYLE}
@@ -536,7 +537,7 @@ export default function Vista3DPais() {
         </MapGL>
 
         {/* Leyenda */}
-        <div className="pointer-events-none absolute left-4 top-4 w-[290px] rounded-lg border border-emerald-900/40 bg-[#0a1220]/90 p-3 shadow-float backdrop-blur">
+        <div className="pointer-events-none absolute left-5 top-5 z-10 w-[310px] rounded-xl glass-card p-3.5 anim-fade-up">
           <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
             Vista {viewMode.toUpperCase()} · {anio} · {nivel === "pais" ? "País" : "Provincia"}
           </div>
@@ -573,11 +574,11 @@ export default function Vista3DPais() {
         )}
 
         {/* Botones */}
-        <div className="absolute bottom-4 right-4 flex gap-2">
+        <div className="absolute bottom-5 right-5 z-10 flex gap-2">
           {nivel === "provincia" && (
             <button
               onClick={() => reset()}
-              className="rounded-md border border-emerald-500/60 bg-emerald-500/15 px-3 py-1.5 text-[11px] font-medium text-emerald-200 transition hover:bg-emerald-500/30 hover:text-white"
+              className="rounded-lg border border-emerald-400/60 bg-emerald-500/20 px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-100 backdrop-blur-md transition hover:border-emerald-300 hover:bg-emerald-500/35 hover:text-white"
             >
               ↺ Volver al país
             </button>
@@ -586,15 +587,18 @@ export default function Vista3DPais() {
 
         {/* Loading overlay */}
         {loadingProv && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[#0a1220]/40 backdrop-blur-sm">
-            <div className="rounded-md border border-emerald-500/40 bg-[#0a1220]/90 px-4 py-2 text-[11px] font-medium text-emerald-200">
-              Cargando provincia…
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-[#0a1220]/35 backdrop-blur-sm">
+            <div className="flex items-center gap-2.5 rounded-xl glass-card px-4 py-2.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 pulse-dot" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                Cargando provincia
+              </span>
             </div>
           </div>
         )}
 
         {/* Breadcrumb */}
-        <div className="absolute left-4 bottom-4 rounded-md border border-emerald-900/40 bg-[#0a1220]/90 px-3 py-1.5 text-[11px] text-emerald-300/85">
+        <div className="absolute left-5 bottom-5 z-10 rounded-lg glass-card px-3.5 py-2 text-[11.5px] text-emerald-300/90">
           <button
             onClick={() => reset()}
             className={nivel === "pais" ? "font-semibold text-white" : "underline-offset-2 hover:underline"}
@@ -649,12 +653,35 @@ function bboxOf(feature: GeoJSON.Feature): [number, number, number, number] {
 function enrichHexgrid(
   fc: GeoJSON.FeatureCollection,
   getValue: (props: HexProps) => number,
+  smooth = true,
 ): GeoJSON.FeatureCollection {
   const MAX_HEIGHT = 90000; // unidades del mapa (proyección Mercator)
   const rawValues = fc.features.map((f) => getValue(f.properties as HexProps));
+
+  // Smoothing por vecinos baked en el geojson (build-hexgrid-pais.mjs).
+  // Para cada celda: 0.55 propio + 0.075 × 6 vecinos. Bordes (n<6): redistribuye.
+  let values = rawValues;
+  if (smooth) {
+    const smoothed = new Array(rawValues.length);
+    for (let i = 0; i < fc.features.length; i++) {
+      const neighbors = ((fc.features[i].properties as HexProps).n) ?? [];
+      const k = neighbors.length;
+      if (k === 0) { smoothed[i] = rawValues[i]; continue; }
+      let s = rawValues[i] * 0.55;
+      let wTotal = 0.55;
+      const wEach = 0.45 / Math.max(1, k);
+      for (const nIdx of neighbors) {
+        s += rawValues[nIdx] * wEach;
+        wTotal += wEach;
+      }
+      smoothed[i] = s / wTotal;
+    }
+    values = smoothed;
+  }
+
   let globalMax = 0;
-  for (const v of rawValues) if (v > globalMax) globalMax = v;
-  const positives = rawValues.filter((v) => v > 0).slice().sort((a, b) => a - b);
+  for (const v of values) if (v > globalMax) globalMax = v;
+  const positives = values.filter((v) => v > 0).slice().sort((a, b) => a - b);
   const N = positives.length;
   const percentileOf = (v: number): number => {
     if (v <= 0 || N === 0) return 0;
@@ -667,7 +694,7 @@ function enrichHexgrid(
     return lo / N;
   };
   const features = fc.features.map((f, i) => {
-    const v = rawValues[i];
+    const v = values[i];
     const linear = globalMax > 0 ? v / globalMax : 0;
     const visualH = Math.pow(linear, 0.4);
     const intensity = percentileOf(v);
@@ -745,7 +772,7 @@ function HoverInfo({
   const unidad = metric === "tasa" ? " /100k" : " hechos";
 
   return (
-    <div className="pointer-events-none absolute right-4 top-4 w-[240px] rounded-lg border border-emerald-900/40 bg-[#0a1220]/92 p-3 shadow-float backdrop-blur">
+    <div className="pointer-events-none absolute right-5 top-5 z-10 w-[250px] rounded-xl glass-card p-3.5 anim-fade-up">
       <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
         {secondaryLabel}
       </div>

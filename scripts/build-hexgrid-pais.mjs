@@ -10,7 +10,7 @@ const IN_PROV = path.join(process.cwd(), "public", "data", "pais.geojson");
 const IN_DEP_DIR = path.join(process.cwd(), "public", "data", "departamentos");
 const OUT = path.join(process.cwd(), "public", "data", "hexgrid-pais.geojson");
 
-const CELL_KM = Number(process.env.HEX_KM ?? 25);
+const CELL_KM = Number(process.env.HEX_KM ?? 15);
 const DEC = 4;
 
 // Bbox de Argentina continental (sin Antártida).
@@ -59,6 +59,28 @@ function main() {
     if (i % 500 === 0) process.stdout.write(`\r  procesadas=${i}/${cells.features.length}`);
   });
   process.stdout.write("\n");
+
+  // Precomputar 6 vecinos por celda (por distancia entre centroides) para smoothing en cliente.
+  console.log("  computando vecinos…");
+  const centroids = out.map((c) => turf.centroid(c).geometry.coordinates);
+  const CELL_DEG = CELL_KM / 111; // grados ~ km
+  for (let i = 0; i < out.length; i++) {
+    const [lon, lat] = centroids[i];
+    // Búsqueda local: candidatos cuyo centroide cae dentro de 2.5 × cell
+    const dlat = CELL_DEG * 2.5;
+    const dlon = CELL_DEG * 2.5 / Math.cos((lat * Math.PI) / 180);
+    const cand = [];
+    for (let j = 0; j < out.length; j++) {
+      if (i === j) continue;
+      const [lo, la] = centroids[j];
+      if (Math.abs(la - lat) > dlat) continue;
+      if (Math.abs(lo - lon) > dlon) continue;
+      const dx = lo - lon, dy = la - lat;
+      cand.push({ j, d: dx * dx + dy * dy });
+    }
+    cand.sort((a, b) => a.d - b.d);
+    out[i].properties.n = cand.slice(0, 6).map((x) => x.j);
+  }
 
   const fc = { type: "FeatureCollection", features: out };
   fs.writeFileSync(OUT, JSON.stringify(fc));
