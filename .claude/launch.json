@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mapa-pais",
+      "runtimeExecutable": "echo",
+      "runtimeArgs": ["already-running"],
+      "port": 3000
+    }
+  ]
+}
