@@ -52,6 +52,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   const [depsGeo, setDepsGeo] = useState<GeoJSON.FeatureCollection | null>(null);
   const [hoverProvId, setHoverProvId] = useState<string | null>(null);
   const [hoverDepId, setHoverDepId] = useState<string | null>(null);
+  const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number } | null>(null);
   const [viewState, setViewState] = useState({
     longitude: -63.5, latitude: -38.5, zoom: 3.7, pitch: 0, bearing: 0,
   });
@@ -298,14 +299,18 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         onMouseMove={(e) => {
           const f = e.features?.[0];
           const props = f?.properties ?? {};
+          const depId = (props.departamento_id as string | undefined) ?? null;
+          setHoverDepId(depId);
           if (nivel === "pais") {
-            setHoverProvId(props.provincia_id ?? null);
-            setHoverDepId(null);
+            setHoverProvId((props.provincia_id as string | undefined) ?? null);
+          }
+          if (depId && e.point) {
+            setHoverPoint({ x: e.point.x, y: e.point.y });
           } else {
-            setHoverDepId(props.departamento_id ?? null);
+            setHoverPoint(null);
           }
         }}
-        onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); }}
+        onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); setHoverPoint(null); }}
         onClick={(e) => {
           const f = e.features?.[0];
           const props = (f?.properties ?? {}) as any;
@@ -469,6 +474,34 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
 
         {/* Mask removida: el basemap minimal con background color "#1a1208" ya cubre
             todo lo no-Argentina. Sin mask geojson → sin tessellation artifacts. */}
+
+        {/* === Hover extrusion: el depto bajo el mouse se eleva ligeramente === */}
+        {!isMobile && hoverDepId && depsGeo && (
+          <Source
+            id="dep-hover-extrusion"
+            type="geojson"
+            data={{
+              type: "FeatureCollection",
+              features: depsGeo.features.filter(
+                (f) => (f.properties as any).departamento_id === hoverDepId,
+              ),
+            }}
+          >
+            <Layer
+              id="dep-hover-extrusion-fill"
+              type="fill-extrusion"
+              paint={{
+                "fill-extrusion-color": "#f4c95d",
+                // Altura modesta — sólo para marcar diferencia. Más alto en provincia (pitch 50)
+                // donde la perspectiva ya está activa; subtle en país (pitch 0).
+                "fill-extrusion-height": nivel === "provincia" ? 18000 : 8000,
+                "fill-extrusion-base": 0,
+                "fill-extrusion-opacity": 0.72,
+                "fill-extrusion-vertical-gradient": true,
+              }}
+            />
+          </Source>
+        )}
       </MapGL>
 
       {/* === Leader lines (SVG sobre el mapa) — desktop only === */}
@@ -478,6 +511,18 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           depAnchor={departamentoSel ? depAnchorPx : null}
         />
       </div>
+
+      {/* === Hover tooltip near cursor (desktop only) === */}
+      {!isMobile && hoverDepId && hoverPoint && (
+        <HoverTooltip
+          dataset={dataset}
+          depId={hoverDepId}
+          point={hoverPoint}
+          delitoId={delitoId}
+          anio={anio}
+          metric={metric}
+        />
+      )}
 
       {/* === Header nav: desktop muestra los dos chips, mobile sólo Fuente SNIC === */}
       <div className="pointer-events-none absolute right-0 top-0 z-40">
@@ -1079,6 +1124,53 @@ function DepartamentoHUD({
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Tooltip flotante que sigue el cursor cuando el mouse hovea un departamento.
+   Muestra nombre del depto + provincia + valor de la métrica actual. */
+function HoverTooltip({
+  dataset, depId, point, delitoId, anio, metric,
+}: {
+  dataset: Dataset; depId: string;
+  point: { x: number; y: number };
+  delitoId: string; anio: number; metric: Metric;
+}) {
+  const depIdx = dataset.departamentos.findIndex((d) => d.id === depId);
+  const dep = depIdx >= 0 ? dataset.departamentos[depIdx] : null;
+  if (!dep) return null;
+  const prov = dataset.provincias.find((p) => p.id === dep.provincia_id);
+  const ai = dataset.anios.indexOf(anio);
+  const isAll = delitoId === "all";
+  const di = isAll ? -1 : dataset.delitos.findIndex((d) => d.id === delitoId);
+  const val = isAll
+    ? totalDepartamento(dataset, depIdx, ai, metric)
+    : valorDepartamento(dataset, depIdx, di, ai, metric);
+  const fmt = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: metric === "tasa" ? 1 : 0 });
+  const unidad = metric === "tasa" ? "/100k" : "hechos";
+
+  // Anti-clipping: si está cerca del borde derecho/inferior, flippeo el offset
+  const w = typeof window !== "undefined" ? window.innerWidth : 1920;
+  const h = typeof window !== "undefined" ? window.innerHeight : 1080;
+  const flipX = point.x + 240 > w;
+  const flipY = point.y + 110 > h;
+  const left = flipX ? point.x - 16 : point.x + 16;
+  const top = flipY ? point.y - 16 : point.y + 16;
+  const transform = `translate(${flipX ? "-100%" : "0"}, ${flipY ? "-100%" : "0"})`;
+
+  return (
+    <div
+      className="pointer-events-none absolute z-30 rounded-lg border border-amber-300/30 bg-black/85 px-3 py-2 backdrop-blur-md"
+      style={{ left, top, transform }}
+    >
+      <div className="text-[9.5px] uppercase tracking-[0.2em] text-amber-300/85">Departamento</div>
+      <div className="mt-0.5 headline text-[14px] leading-tight text-white">{dep.nombre}</div>
+      <div className="mt-0.5 text-[10.5px] text-white/55">{prov?.nombre}</div>
+      <div className="mt-1.5 flex items-baseline gap-1 num">
+        <span className="text-[14px] font-semibold text-white">{fmt(val)}</span>
+        <span className="text-[9.5px] text-white/55 mono">{unidad}</span>
+      </div>
     </div>
   );
 }
