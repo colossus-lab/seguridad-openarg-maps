@@ -60,6 +60,18 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   const orbitRafRef = useRef<number | null>(null);
   const nivel: "pais" | "provincia" = provinciaSel ? "provincia" : "pais";
 
+  // Mobile detection via media query — controla layout y padding del mapa
+  const [isMobile, setIsMobile] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   useEffect(() => {
     loadPaisGeojson().then(setPaisGeo).catch(console.error);
     loadDepartamentosAll().then(setDepsGeo).catch(console.error);
@@ -98,9 +110,12 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
       const f = depsGeo.features.find((x) => (x.properties as any).departamento_id === departamentoSel);
       const c = (f?.properties as any)?.centroid as [number, number] | undefined;
       if (c) {
+        const pad = isMobile
+          ? { top: 64, right: 40, bottom: 320, left: 40 }
+          : { top: 0, right: 380, bottom: 0, left: 340 };
         map.easeTo({
           center: c, zoom: 7.2, pitch: 42, bearing: 0,
-          padding: { top: 0, right: 380, bottom: 0, left: 340 } as any,
+          padding: pad as any,
           duration: 1200, easing: easeOut,
         });
       }
@@ -108,17 +123,21 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
       const prov = paisGeo.features.find((x) => (x.properties as any).provincia_id === provinciaSel);
       if (!prov) return;
       const bb = bboxOf(prov);
-      // fitBounds + tilt sutil en un solo movimiento suave (~1100ms).
-      // Sin revolución: el 3D viene del pitch + extrusion editorial de la provincia.
+      const pad = isMobile
+        ? { top: 100, right: 40, bottom: 320, left: 40 }   // bottom-sheet HUD ~280px
+        : { top: 100, right: 380, bottom: 100, left: 340 };
       map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], {
-        padding: { top: 100, right: 380, bottom: 100, left: 340 },
+        padding: pad,
         pitch: 50, bearing: -6, duration: 1100, easing: easeOut, maxZoom: 7.5,
       });
       void easeInOut;
     } else {
+      const pad = isMobile
+        ? { top: 64, right: 0, bottom: 0, left: 0 }
+        : { top: 0, right: 0, bottom: 0, left: 340 };
       map.easeTo({
-        center: [-63.5, -38.5], zoom: 3.7, pitch: 0, bearing: 0,
-        padding: { top: 0, right: 0, bottom: 0, left: 340 } as any,
+        center: [-63.5, -38.5], zoom: isMobile ? 3.3 : 3.7, pitch: 0, bearing: 0,
+        padding: pad as any,
         duration: 1200, easing: easeOut,
       });
     }
@@ -306,10 +325,13 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         onLoad={() => {
           const m = mapRef.current?.getMap();
           if (!m) return;
-          // Aplicar padding del sidebar (320px) al cargar para que el mapa quede centrado en el viewport útil
+          // Padding responsive: sidebar 340 en desktop, top compact bar 64 en mobile
+          const pad = isMobile
+            ? { top: 64, right: 0, bottom: 0, left: 0 }
+            : { top: 0, right: 0, bottom: 0, left: 340 };
           m.easeTo({
-            center: [-63.5, -38.5], zoom: 3.7, pitch: 0, bearing: 0,
-            padding: { top: 0, right: 0, bottom: 0, left: 340 } as any,
+            center: [-63.5, -38.5], zoom: isMobile ? 3.3 : 3.7, pitch: 0, bearing: 0,
+            padding: pad as any,
             duration: 0,
           });
           if (!onMapReady) return;
@@ -449,26 +471,28 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             todo lo no-Argentina. Sin mask geojson → sin tessellation artifacts. */}
       </MapGL>
 
-      {/* === Leader lines (SVG sobre el mapa) === */}
-      <LeaderLines
-        provAnchor={nivel === "provincia" && !departamentoSel ? provAnchorPx : null}
-        depAnchor={departamentoSel ? depAnchorPx : null}
-      />
+      {/* === Leader lines (SVG sobre el mapa) — desktop only === */}
+      <div className="hidden md:block">
+        <LeaderLines
+          provAnchor={nivel === "provincia" && !departamentoSel ? provAnchorPx : null}
+          depAnchor={departamentoSel ? depAnchorPx : null}
+        />
+      </div>
 
-      {/* === Header nav (sólo right side; el chip Colossus está en la sidebar) === */}
+      {/* === Header nav: desktop muestra los dos chips, mobile sólo Fuente SNIC === */}
       <div className="pointer-events-none absolute right-0 top-0 z-40">
-        <nav className="pointer-events-auto flex items-center gap-2 px-6 py-4">
-          <a href="https://www.colossuslab.org" target="_blank" rel="noreferrer" className="rounded-full border border-white/10 bg-black/55 px-3.5 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/65 backdrop-blur-md transition hover:text-white">
+        <nav className="pointer-events-auto flex items-center gap-2 px-4 py-3 md:px-6 md:py-4">
+          <a href="https://www.colossuslab.org" target="_blank" rel="noreferrer" className="hidden rounded-full border border-white/10 bg-black/55 px-3.5 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/65 backdrop-blur-md transition hover:text-white md:inline-block">
             colossuslab.org
           </a>
-          <a href="https://www.argentina.gob.ar/seguridad/estadisticascriminales" target="_blank" rel="noreferrer" className="rounded-full border border-white/10 bg-black/55 px-3.5 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/65 backdrop-blur-md transition hover:text-white">
-            Fuente SNIC ↗
+          <a href="https://www.argentina.gob.ar/seguridad/estadisticascriminales" target="_blank" rel="noreferrer" className="rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-white/65 backdrop-blur-md transition hover:text-white md:px-3.5 md:text-[10.5px] md:tracking-[0.18em]">
+            SNIC ↗
           </a>
         </nav>
       </div>
 
-      {/* === Sidebar izquierda anclada (chip + headline + filtros + stats + legend) === */}
-      <aside className="pointer-events-auto absolute left-0 top-0 z-30 flex h-full w-[320px] flex-col gap-5 border-r border-white/8 bg-black/65 px-5 pb-6 pt-5 backdrop-blur-md anim-fade-up">
+      {/* === Sidebar izquierda anclada (DESKTOP only) === */}
+      <aside className="pointer-events-auto absolute left-0 top-0 z-30 hidden h-full w-[320px] flex-col gap-5 border-r border-white/8 bg-black/65 px-5 pb-6 pt-5 backdrop-blur-md anim-fade-up md:flex">
         {/* Chip Colossus institucional */}
         <div className="inline-flex items-center gap-2.5 self-start rounded-full border border-white/10 bg-black/50 px-3 py-1.5">
           <span className="relative inline-flex h-2 w-2">
@@ -630,7 +654,129 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         </div>
       </aside>
 
-      {/* === HUD provincia (right) con leader line === */}
+      {/* === MOBILE: top compact bar (chip Colossus + categoría + año, tap → bottom sheet) === */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-2 px-3 pt-3 md:hidden">
+        <div className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/65 px-3 py-1.5 backdrop-blur-md">
+          <span className="relative inline-flex h-1.5 w-1.5">
+            <span className="absolute inset-0 rounded-full bg-amber-300 halo-expand" />
+            <span className="absolute inset-0 rounded-full bg-amber-300" />
+          </span>
+          <span className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-white/85">Colossus</span>
+        </div>
+        <button
+          onClick={() => setFiltersOpen(true)}
+          className="pointer-events-auto flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full border border-white/10 bg-black/65 px-3.5 py-1.5 text-left backdrop-blur-md transition active:scale-[0.98]"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[11px] font-semibold text-white">{delitoNombre}</div>
+            <div className="text-[9.5px] text-white/55 mono num">{anio} · {metric === "tasa" ? "tasa /100k" : "hechos"}</div>
+          </div>
+          <svg className="h-3.5 w-3.5 text-white/55" viewBox="0 0 12 12" fill="none">
+            <path d="M3 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+
+      {/* === MOBILE: bottom sheet drawer con filtros completos === */}
+      {filtersOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setFiltersOpen(false)}>
+          <div className="absolute inset-0 bg-black/55 backdrop-blur-sm anim-fade-up" />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-white/10 bg-[#0a0808] px-5 pb-8 pt-5 anim-fade-up"
+          >
+            <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-white/15" />
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] uppercase tracking-[0.22em] text-amber-300/85">
+                Filtros · SNIC {dataset.anios[0]}–{dataset.anios[dataset.anios.length - 1]}
+              </div>
+              <button onClick={() => setFiltersOpen(false)} className="rounded-md border border-white/15 px-2 py-0.5 text-[10px] text-white/55">
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-4">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-white/55">Tipo de delito</span>
+                <select
+                  value={delitoId}
+                  onChange={(e) => setDelito(e.target.value)}
+                  className="rounded-md border border-white/10 bg-black/40 px-3 py-2.5 text-[13px] text-white outline-none focus:border-amber-300/60"
+                >
+                  <option value="all">— Todos los delitos (suma SNIC) —</option>
+                  {dataset.delitos.map((d) => (
+                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-white/55">Métrica</span>
+                <div className="inline-flex overflow-hidden rounded-md border border-white/10 bg-black/40">
+                  {(["tasa", "hechos"] as const).map((m, i) => (
+                    <button
+                      key={m}
+                      onClick={() => setMetric(m)}
+                      className={["press-feedback flex-1 px-3 py-3 text-[12px] font-medium transition",
+                        i === 0 ? "border-r border-white/10" : "",
+                        metric === m ? "bg-amber-300 text-black" : "text-white/65"].join(" ")}
+                    >
+                      {m === "tasa" ? "Tasa /100k" : "Hechos"}
+                    </button>
+                  ))}
+                </div>
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="flex items-baseline justify-between">
+                  <span className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-white/55">Año</span>
+                  <span className="mono num text-[13px] font-semibold text-white">{anio}</span>
+                </span>
+                <div className="relative pt-7">
+                  <div className="slider-tooltip" style={{
+                    left: `${((anio - dataset.anios[0]) / (dataset.anios[dataset.anios.length - 1] - dataset.anios[0])) * 100}%`,
+                  }}>{anio}</div>
+                  <input
+                    type="range"
+                    min={dataset.anios[0]} max={dataset.anios[dataset.anios.length - 1]} step={1}
+                    value={anio} onChange={(e) => setAnio(Number(e.target.value))}
+                    className="w-full"
+                  />
+                  <div className="mt-1 flex justify-between text-[10px] text-white/35 mono num">
+                    <span>{dataset.anios[0]}</span>
+                    <span>{dataset.anios[dataset.anios.length - 1]}</span>
+                  </div>
+                </div>
+              </label>
+
+              <div className="mt-2 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+                <div>
+                  <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-amber-300/85">Categoría · {anio}</div>
+                  <div className="mt-0.5 text-[18px] font-semibold leading-none text-white num">{totalSel.toLocaleString("es-AR")}</div>
+                </div>
+                <div>
+                  <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/45">Total SNIC</div>
+                  <div className="mt-0.5 text-[18px] font-semibold leading-none text-white/75 num">{totalAll.toLocaleString("es-AR")}</div>
+                </div>
+              </div>
+
+              <div className="mt-2 border-t border-white/10 pt-4">
+                <div className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-amber-300/85">Escala de color</div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full"
+                  style={{ background: `linear-gradient(90deg, ${CINDER.join(", ")})` }} />
+                <div className="mt-1.5 flex justify-between text-[9px] uppercase tracking-[0.16em] text-white/40 num">
+                  <span>min</span><span>mediana</span><span>max</span>
+                </div>
+                <div className="mt-2 text-[10px] leading-snug text-white/45">
+                  Color por percentil · escala perceptual robusta a outliers.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === HUD provincia (right desktop / bottom-sheet mobile) === */}
       {nivel === "provincia" && !departamentoSel && provinciaSel && (
         <ProvinciaHUD
           dataset={dataset}
@@ -639,13 +785,15 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           anio={anio}
           metric={metric}
           anchorPx={provAnchorPx}
+          isMobile={isMobile}
           onClose={() => reset()}
         />
       )}
 
-      {/* === HUD departamento (right) con leader line === */}
+      {/* === HUD departamento === */}
       {departamentoSel && (
         <DepartamentoHUD
+          isMobile={isMobile}
           dataset={dataset}
           departamentoId={departamentoSel}
           delitoId={delitoId}
@@ -713,11 +861,12 @@ function LeaderLines({
 /* ============== HUD provincia ============== */
 
 function ProvinciaHUD({
-  dataset, provinciaId, delitoId, anio, metric, anchorPx, onClose,
+  dataset, provinciaId, delitoId, anio, metric, anchorPx, onClose, isMobile,
 }: {
   dataset: Dataset; provinciaId: string;
   delitoId: string; anio: number; metric: Metric;
   anchorPx: { x: number; y: number } | null;
+  isMobile?: boolean;
   onClose: () => void;
 }) {
   void anchorPx;
@@ -745,12 +894,17 @@ function ProvinciaHUD({
     return s.slice(from, ai + 1);
   });
 
+  const containerCls = isMobile
+    ? "pointer-events-auto fixed inset-x-0 bottom-0 z-20 max-h-[60vh] overflow-y-auto rounded-t-2xl border-t border-amber-300/30 bg-black/85 px-5 pb-7 pt-4 backdrop-blur-md anim-fade-up"
+    : "pointer-events-auto absolute right-8 top-[160px] z-20 w-[360px] rounded-2xl border border-amber-300/30 bg-black/75 px-5 py-5 backdrop-blur-md anim-fade-up";
+
   return (
-    <div className="pointer-events-auto absolute right-8 top-[160px] z-20 w-[360px] rounded-2xl border border-amber-300/30 bg-black/75 px-5 py-5 backdrop-blur-md anim-fade-up">
+    <div className={containerCls}>
+      {isMobile && <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-white/15" />}
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-[10px] uppercase tracking-[0.22em] text-amber-300/80">Provincia</div>
-          <div className="mt-1 headline text-[28px] leading-tight text-white">{prov.nombre}</div>
+          <div className={`mt-1 headline leading-tight text-white ${isMobile ? "text-[22px]" : "text-[28px]"}`}>{prov.nombre}</div>
         </div>
         <button onClick={onClose} className="rounded-md border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/55 transition hover:text-white">
           ✕
@@ -808,11 +962,12 @@ function ProvinciaHUD({
 /* ============== HUD departamento ============== */
 
 function DepartamentoHUD({
-  dataset, departamentoId, delitoId, anio, metric, anchorPx, onClose,
+  dataset, departamentoId, delitoId, anio, metric, anchorPx, onClose, isMobile,
 }: {
   dataset: Dataset; departamentoId: string;
   delitoId: string; anio: number; metric: Metric;
   anchorPx: { x: number; y: number } | null;
+  isMobile?: boolean;
   onClose: () => void;
 }) {
   void anchorPx;
@@ -842,12 +997,17 @@ function DepartamentoHUD({
     return s.slice(from, ai + 1);
   });
 
+  const containerCls = isMobile
+    ? "pointer-events-auto fixed inset-x-0 bottom-0 z-20 max-h-[60vh] overflow-y-auto rounded-t-2xl border-t border-amber-200/40 bg-black/85 px-5 pb-7 pt-4 backdrop-blur-md anim-fade-up"
+    : "pointer-events-auto absolute right-8 top-[160px] z-20 w-[360px] rounded-2xl border border-amber-200/40 bg-black/75 px-5 py-5 backdrop-blur-md anim-fade-up";
+
   return (
-    <div className="pointer-events-auto absolute right-8 top-[160px] z-20 w-[360px] rounded-2xl border border-amber-200/40 bg-black/75 px-5 py-5 backdrop-blur-md anim-fade-up">
+    <div className={containerCls}>
+      {isMobile && <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-white/15" />}
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-[10px] uppercase tracking-[0.22em] text-amber-200/85">Departamento</div>
-          <div className="mt-1 headline text-[22px] leading-tight text-white">{dep.nombre}</div>
+          <div className={`mt-1 headline leading-tight text-white ${isMobile ? "text-[18px]" : "text-[22px]"}`}>{dep.nombre}</div>
           <div className="mt-0.5 text-[11.5px] text-white/55">{prov?.nombre}</div>
         </div>
         <button onClick={onClose} className="rounded-md border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/55 transition hover:text-white">

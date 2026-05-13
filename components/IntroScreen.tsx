@@ -71,25 +71,27 @@ export default function IntroScreen({ progress, phase }: { progress: number; pha
       }}
     >
       <div className="paper-grid absolute inset-0 opacity-[0.25]" />
-      <div className="relative flex w-full max-w-xl flex-col items-center px-8 text-center">
-        {/* Logo institucional grande */}
+      <div className="relative flex w-full max-w-xl flex-col items-center px-6 text-center md:px-8">
+        {/* Logo institucional */}
         <div className="flex items-center gap-3 anim-fade-up">
-          <span className="relative inline-flex h-3 w-3">
+          <span className="relative inline-flex h-2.5 w-2.5 md:h-3 md:w-3">
             <span className="absolute inset-0 rounded-full bg-emerald-500 halo-expand" />
             <span className="absolute inset-0 rounded-full bg-emerald-500" />
           </span>
-          <span className="text-[13px] font-semibold uppercase tracking-[0.28em] text-ink">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-ink md:text-[13px] md:tracking-[0.28em]">
             Colossus Lab
           </span>
         </div>
 
         {/* Línea de typing principal */}
-        <div className="mt-12 h-[120px] flex flex-col items-center justify-center gap-2">
+        <div className="mt-8 h-[100px] flex flex-col items-center justify-center gap-2 md:mt-12 md:h-[120px]">
           {LINES.slice(0, step).map((line, i) => (
             <div
               key={i}
-              className={`text-[15px] tracking-tight ${
-                i === 0 ? "text-ink font-semibold text-[28px]" : i === 1 ? "text-ink-2 text-[15px]" : "text-ink-3 text-[13px] mono"
+              className={`tracking-tight ${
+                i === 0 ? "text-ink font-semibold text-[22px] md:text-[28px]"
+                : i === 1 ? "text-ink-2 text-[13px] md:text-[15px]"
+                : "text-ink-3 text-[11.5px] mono md:text-[13px]"
               }`}
               style={{ opacity: 0.55 + i * 0.15 }}
             >
@@ -99,7 +101,9 @@ export default function IntroScreen({ progress, phase }: { progress: number; pha
           {step < LINES.length && (
             <div
               className={`typing-cursor ${
-                step === 0 ? "text-[28px] font-semibold tracking-tight text-ink" : step === 1 ? "text-[15px] text-ink-2" : "mono text-[13px] text-ink-3"
+                step === 0 ? "text-[22px] font-semibold tracking-tight text-ink md:text-[28px]"
+                : step === 1 ? "text-[13px] text-ink-2 md:text-[15px]"
+                : "mono text-[11.5px] text-ink-3 md:text-[13px]"
               }`}
             >
               {typed}
@@ -108,8 +112,8 @@ export default function IntroScreen({ progress, phase }: { progress: number; pha
         </div>
 
         {/* Barra de progreso */}
-        <div className="mt-10 w-full max-w-sm">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-ink-3">
+        <div className="mt-8 w-full max-w-sm md:mt-10">
+          <div className="flex items-center justify-between text-[9.5px] uppercase tracking-[0.18em] text-ink-3 md:text-[10px]">
             <span className="truncate pr-3">{phase ?? "Cargando datos SNIC"}</span>
             <span className="num mono shrink-0">{Math.round(progress * 100)}%</span>
           </div>
@@ -124,7 +128,7 @@ export default function IntroScreen({ progress, phase }: { progress: number; pha
         {/* Skip */}
         <button
           onClick={skipNow}
-          className="press-feedback absolute bottom-[-180px] right-[-10px] rounded-md border border-line bg-paper/80 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.14em] text-ink-2 backdrop-blur transition hover:border-emerald-500/60 hover:text-ink"
+          className="press-feedback absolute bottom-[-140px] right-2 rounded-md border border-line bg-paper/80 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-ink-2 backdrop-blur transition hover:border-emerald-500/60 hover:text-ink md:bottom-[-180px] md:right-[-10px] md:px-4 md:py-2 md:text-[11px]"
         >
           Ir al mapa →
         </button>
