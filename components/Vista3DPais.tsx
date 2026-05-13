@@ -940,6 +940,7 @@ function ProvinciaHUD({
   const top5 = topNDelitosProvincia(dataset, provIdx, ai, 5);
   const isAll = delitoId === "all";
   const di = isAll ? -1 : dataset.delitos.findIndex((d) => d.id === delitoId);
+  const delitoNombre = isAll ? "" : dataset.delitos.find((d) => d.id === delitoId)?.nombre ?? "";
 
   const tasa = isAll ? 0 : (di >= 0 ? dataset.prov_tasa[provIdx][di][ai] : 0);
   const hechos = isAll
@@ -995,6 +996,12 @@ function ProvinciaHUD({
           evo.deltaPct === null ? "neutral" : evo.deltaPct >= 5 ? "danger" : evo.deltaPct <= -5 ? "good" : "neutral"
         } />
       </div>
+
+      {!isAll && hechos === 0 && top5.length > 0 && (
+        <p className="mt-3 text-[10.5px] leading-snug text-white/55">
+          Cero hechos de <span className="text-white/80">{delitoNombre}</span> en {anio}. Las categorías con actividad aparecen abajo.
+        </p>
+      )}
 
       {/* Top 5 delitos */}
       {(!isMobile || expanded) && (
@@ -1056,6 +1063,7 @@ function DepartamentoHUD({
   const top5 = topNDelitosDepartamento(dataset, depIdx, ai, 5);
   const isAll = delitoId === "all";
   const di = isAll ? -1 : dataset.delitos.findIndex((d) => d.id === delitoId);
+  const delitoNombre = isAll ? "" : dataset.delitos.find((d) => d.id === delitoId)?.nombre ?? "";
 
   const tasa = isAll ? 0 : (di >= 0 ? dataset.dep_tasa[depIdx][di][ai] : 0);
   const hechos = isAll
@@ -1112,6 +1120,12 @@ function DepartamentoHUD({
           evo.deltaPct === null ? "neutral" : evo.deltaPct >= 5 ? "danger" : evo.deltaPct <= -5 ? "good" : "neutral"
         } />
       </div>
+
+      {!isAll && hechos === 0 && top5.length > 0 && (
+        <p className="mt-3 text-[10.5px] leading-snug text-white/55">
+          Cero hechos de <span className="text-white/80">{delitoNombre}</span> en {anio}. Las categorías con actividad aparecen abajo.
+        </p>
+      )}
 
       {(!isMobile || expanded) && (
         <div className="mt-5 border-t border-white/10 pt-4">
