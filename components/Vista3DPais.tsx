@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import MapGL, {
   Layer,
   NavigationControl,
@@ -149,26 +149,32 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     if (orbitRafRef.current !== null) cancelAnimationFrame(orbitRafRef.current);
   }, []);
 
-  // Datos.
-  const ai = useMemo(() => (dataset ? dataset.anios.indexOf(anio) : -1), [dataset, anio]);
+  // Datos. Usamos deferred values para los filtros pesados → el click del botón
+  // responde inmediatamente y la recomputación del mapa se trata como non-urgent,
+  // dejando que React paint primero el cambio visual del toggle.
+  const deferredMetric = useDeferredValue(metric);
+  const deferredDelitoId = useDeferredValue(delitoId);
+  const deferredAnio = useDeferredValue(anio);
+  const ai = useMemo(() => (dataset ? dataset.anios.indexOf(deferredAnio) : -1), [dataset, deferredAnio]);
   const di = useMemo(() => {
     if (!dataset) return -1;
-    if (delitoId === "all") return -1;
-    return dataset.delitos.findIndex((d) => d.id === delitoId);
-  }, [dataset, delitoId]);
+    if (deferredDelitoId === "all") return -1;
+    return dataset.delitos.findIndex((d) => d.id === deferredDelitoId);
+  }, [dataset, deferredDelitoId]);
 
-  // Valor por departamento (choropleth principal).
+  // Valor por departamento (choropleth principal). Usa deferred values → render
+  // del mapa puede esperar un frame mientras el click del botón es snappy.
   const valoresDep = useMemo(() => {
     if (!dataset || ai < 0) return new Map<string, number>();
     const m = new Map<string, number>();
     dataset.departamentos.forEach((d, idx) => {
       const v = di < 0
-        ? totalDepartamento(dataset, idx, ai, metric)
-        : valorDepartamento(dataset, idx, di, ai, metric);
+        ? totalDepartamento(dataset, idx, ai, deferredMetric)
+        : valorDepartamento(dataset, idx, di, ai, deferredMetric);
       m.set(d.id, v);
     });
     return m;
-  }, [dataset, ai, di, metric]);
+  }, [dataset, ai, di, deferredMetric]);
 
   // Choropleth enriched.
   const depsEnriched = useMemo<GeoJSON.FeatureCollection | null>(() => {
@@ -210,18 +216,28 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     } catch (e) { console.error("isobands error", e); return null; }
   }, [depsGeo, valoresDep, paisGeo]);
 
+  // Hover extrusion: FeatureCollection con sólo el depto bajo el cursor.
+  // Memoizado para no crear un objeto nuevo en cada paint (cada mousemove dispararía
+  // un re-source en MapLibre si no estuviera memoizado).
+  const hoverFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!depsGeo || !hoverDepId) return null;
+    const f = depsGeo.features.find((x) => (x.properties as any).departamento_id === hoverDepId);
+    if (!f) return null;
+    return { type: "FeatureCollection", features: [f] };
+  }, [depsGeo, hoverDepId]);
+
   // Valor por provincia (para 3D selectiva + HUD).
   const valoresProv = useMemo(() => {
     if (!dataset || ai < 0) return new Map<string, number>();
     const m = new Map<string, number>();
     dataset.provincias.forEach((p, idx) => {
       const v = di < 0
-        ? totalProvincia(dataset, idx, ai, metric)
-        : valorProvincia(dataset, idx, di, ai, metric);
+        ? totalProvincia(dataset, idx, ai, deferredMetric)
+        : valorProvincia(dataset, idx, di, ai, deferredMetric);
       m.set(p.id, v);
     });
     return m;
-  }, [dataset, ai, di, metric]);
+  }, [dataset, ai, di, deferredMetric]);
 
   // (Extrusion 3D removida — modo paper/ink no usa extrusion editorial)
   void valoresProv;
@@ -476,17 +492,8 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             todo lo no-Argentina. Sin mask geojson → sin tessellation artifacts. */}
 
         {/* === Hover extrusion: el depto bajo el mouse se eleva ligeramente === */}
-        {!isMobile && hoverDepId && depsGeo && (
-          <Source
-            id="dep-hover-extrusion"
-            type="geojson"
-            data={{
-              type: "FeatureCollection",
-              features: depsGeo.features.filter(
-                (f) => (f.properties as any).departamento_id === hoverDepId,
-              ),
-            }}
-          >
+        {!isMobile && hoverFC && (
+          <Source id="dep-hover-extrusion" type="geojson" data={hoverFC}>
             <Layer
               id="dep-hover-extrusion-fill"
               type="fill-extrusion"
