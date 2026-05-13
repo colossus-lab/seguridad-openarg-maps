@@ -26,16 +26,15 @@ const BASE_STYLE: any = {
   glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   sources: {},
   layers: [
-    { id: "background", type: "background", paint: { "background-color": "#1a1208" } },
+    { id: "background", type: "background", paint: { "background-color": "#06090F" } },
   ],
 };
 
-// Paleta ink-on-paper: del color natural del papel (cream) hasta tinta profunda.
-// Pensada para verse como una ilustración a tinta sobre papel sepia.
-const CINDER = ["#ebe0c4", "#d4b88a", "#b08458", "#984a3a", "#6e2a1a", "#2a1410"];
-const PAPER = "#f0e3c8";   // cream del papel (Argentina shape)
-const DESK = "#1a1208";    // dark desk (alrededor del papel)
-const INK = "#3a2418";     // ink color para borders
+// Paleta OpenArg Editorial: navy base + cobalt outlines + sol/vermilion choropleth.
+const CINDER = ["#1A2030", "#3D6FA8", "#74ACDF", "#FFD04A", "#F6B40E", "#C03A18"];
+const PAPER = "#0F1620";   // navy paper sutil (Argentina shape)
+const DESK = "#06090F";    // dark navy desk (alrededor del papel)
+const INK = "#74ACDF";     // cobalt celeste para borders
 const ARG_BBOX: [number, number, number, number] = [-74, -55.2, -53.5, -21.7];
 
 type Vista3DPaisProps = { onMapReady?: () => void };
@@ -438,8 +437,8 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
               paint={{
                 "line-color": [
                   "case",
-                  ["==", ["get", "departamento_id"], departamentoSel ?? "__none__"], "#1a0c08",
-                  ["==", ["get", "departamento_id"], hoverDepId ?? "__none__"], "#3a2418",
+                  ["==", ["get", "departamento_id"], departamentoSel ?? "__none__"], "#06090F",
+                  ["==", ["get", "departamento_id"], hoverDepId ?? "__none__"], "#FFD04A",
                   "rgba(0,0,0,0)",
                 ],
                 "line-width": [
@@ -474,8 +473,8 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
               paint={{
                 "line-color": [
                   "case",
-                  ["==", ["get", "provincia_id"], provinciaSel ?? "__none__"], "#1a0c08",
-                  ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], "#5a3a26",
+                  ["==", ["get", "provincia_id"], provinciaSel ?? "__none__"], "#06090F",
+                  ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], "#F6B40E",
                   INK,
                 ],
                 "line-width": [
@@ -496,7 +495,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           </Source>
         )}
 
-        {/* Mask removida: el basemap minimal con background color "#1a1208" ya cubre
+        {/* Mask removida: el basemap minimal con background color "#06090F" ya cubre
             todo lo no-Argentina. Sin mask geojson → sin tessellation artifacts. */}
 
         {/* === Hover extrusion: el depto bajo el mouse se eleva ligeramente === */}
@@ -506,7 +505,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
               id="dep-hover-extrusion-fill"
               type="fill-extrusion"
               paint={{
-                "fill-extrusion-color": "#f4c95d",
+                "fill-extrusion-color": "#FFD04A",
                 // Altura modesta — sólo para marcar diferencia. Más alto en provincia (pitch 50)
                 // donde la perspectiva ya está activa; subtle en país (pitch 0).
                 "fill-extrusion-height": nivel === "provincia" ? 18000 : 8000,
@@ -743,7 +742,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           <div className="absolute inset-0 bg-black/55 backdrop-blur-sm anim-fade-up" />
           <div
             onClick={(e) => e.stopPropagation()}
-            className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-white/10 bg-[#0a0808] px-5 pb-8 pt-5 anim-fade-up"
+            className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-white/10 bg-[#06090F] px-5 pb-8 pt-5 anim-fade-up"
           >
             <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-white/15" />
             <div className="flex items-center justify-between">
@@ -889,28 +888,28 @@ function LeaderLines({
     >
       <defs>
         <radialGradient id="leader-glow">
-          <stop offset="0%" stopColor="#f4c95d" stopOpacity="1" />
-          <stop offset="100%" stopColor="#f4c95d" stopOpacity="0" />
+          <stop offset="0%" stopColor="#FFD04A" stopOpacity="1" />
+          <stop offset="100%" stopColor="#FFD04A" stopOpacity="0" />
         </radialGradient>
       </defs>
       {provAnchor && (
         <g>
           <circle cx={provAnchor.x} cy={provAnchor.y} r={18} fill="url(#leader-glow)" />
-          <circle cx={provAnchor.x} cy={provAnchor.y} r={5} fill="#f4c95d" />
-          <circle cx={provAnchor.x} cy={provAnchor.y} r={3} fill="#0e1014" />
+          <circle cx={provAnchor.x} cy={provAnchor.y} r={5} fill="#FFD04A" />
+          <circle cx={provAnchor.x} cy={provAnchor.y} r={3} fill="#06090F" />
           <path
             d={`M ${provAnchor.x},${provAnchor.y} L ${(provAnchor.x + hudX) / 2},${provAnchor.y} L ${hudX - 4},${hudY}`}
-            stroke="#f4c95d" strokeWidth="1" fill="none" strokeOpacity="0.85"
+            stroke="#FFD04A" strokeWidth="1" fill="none" strokeOpacity="0.85"
           />
         </g>
       )}
       {depAnchor && (
         <g>
           <circle cx={depAnchor.x} cy={depAnchor.y} r={14} fill="url(#leader-glow)" />
-          <circle cx={depAnchor.x} cy={depAnchor.y} r={4} fill="#fef3c7" />
+          <circle cx={depAnchor.x} cy={depAnchor.y} r={4} fill="#93C5F8" />
           <path
             d={`M ${depAnchor.x},${depAnchor.y} L ${(depAnchor.x + hudX) / 2},${depAnchor.y} L ${hudX - 4},${hudY}`}
-            stroke="#fef3c7" strokeWidth="1" fill="none" strokeOpacity="0.85"
+            stroke="#93C5F8" strokeWidth="1" fill="none" strokeOpacity="0.85"
           />
         </g>
       )}
@@ -1015,7 +1014,7 @@ function ProvinciaHUD({
                     />
                   </div>
                 </div>
-                <Sparkline values={top5Series[i]} color="#fbbf24" width={64} height={20} />
+                <Sparkline values={top5Series[i]} color="#FFD04A" width={64} height={20} />
                 <div className="w-[60px] text-right">
                   <div className="text-[11.5px] font-semibold text-white num">{r.hechos.toLocaleString("es-AR")}</div>
                   <div className="text-[9.5px] text-white/45 mono num">{r.pct.toFixed(1)}%</div>
@@ -1129,7 +1128,7 @@ function DepartamentoHUD({
                       style={{ width: `${(r.hechos / maxTop5) * 100}%` }} />
                   </div>
                 </div>
-                <Sparkline values={top5Series[i]} color="#fde68a" width={64} height={20} />
+                <Sparkline values={top5Series[i]} color="#93C5F8" width={64} height={20} />
                 <div className="w-[60px] text-right">
                   <div className="text-[11.5px] font-semibold text-white num">{r.hechos.toLocaleString("es-AR")}</div>
                   <div className="text-[9.5px] text-white/45 mono num">{r.pct.toFixed(1)}%</div>
@@ -1191,7 +1190,7 @@ function HoverTooltip({
 }
 
 /** Mini sparkline SVG (line + área tenue) para la evolución de una categoría. */
-function Sparkline({ values, color = "#fbbf24", width = 64, height = 18 }: { values: number[]; color?: string; width?: number; height?: number }) {
+function Sparkline({ values, color = "#FFD04A", width = 64, height = 18 }: { values: number[]; color?: string; width?: number; height?: number }) {
   if (values.length < 2) {
     return <svg width={width} height={height} aria-hidden="true" />;
   }
