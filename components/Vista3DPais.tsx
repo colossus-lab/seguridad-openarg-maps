@@ -14,11 +14,21 @@ import {
   topNDelitosProvincia, topNDelitosDepartamento,
   serieProvincia, serieDepartamento, evolucion5Anios,
 } from "@/lib/analytics";
-import { loadPaisGeojson, loadDepartamentosAll, loadMask } from "@/lib/data";
+import { loadPaisGeojson, loadDepartamentosAll } from "@/lib/data";
 import { computeIsobands } from "@/lib/isobands";
 import type { Dataset, Metric } from "@/lib/types";
 
-const BASE_STYLE = "https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json";
+// Estilo minimal: fondo desk plano, sin tiles externos. Argentina se dibuja
+// 100% desde nuestras geometrías → ningún artefacto de tessellation por mask
+// y rendimiento óptimo (no descarga ningún tile).
+const BASE_STYLE: any = {
+  version: 8,
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  sources: {},
+  layers: [
+    { id: "background", type: "background", paint: { "background-color": "#1a1208" } },
+  ],
+};
 
 // Paleta ink-on-paper: del color natural del papel (cream) hasta tinta profunda.
 // Pensada para verse como una ilustración a tinta sobre papel sepia.
@@ -40,7 +50,6 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
 
   const [paisGeo, setPaisGeo] = useState<GeoJSON.FeatureCollection | null>(null);
   const [depsGeo, setDepsGeo] = useState<GeoJSON.FeatureCollection | null>(null);
-  const [maskGeo, setMaskGeo] = useState<GeoJSON.FeatureCollection | null>(null);
   const [hoverProvId, setHoverProvId] = useState<string | null>(null);
   const [hoverDepId, setHoverDepId] = useState<string | null>(null);
   const [viewState, setViewState] = useState({
@@ -54,7 +63,6 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   useEffect(() => {
     loadPaisGeojson().then(setPaisGeo).catch(console.error);
     loadDepartamentosAll().then(setDepsGeo).catch(console.error);
-    loadMask().then(setMaskGeo).catch(console.error);
   }, []);
 
   // Resize defensivo.
@@ -437,16 +445,8 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           </Source>
         )}
 
-        {/* === MASK: tapa todo lo que está fuera de Argentina con el color del escritorio === */}
-        {maskGeo && (
-          <Source id="world-mask" type="geojson" data={maskGeo}>
-            <Layer
-              id="world-mask-fill"
-              type="fill"
-              paint={{ "fill-color": DESK, "fill-opacity": 0.98, "fill-antialias": false }}
-            />
-          </Source>
-        )}
+        {/* Mask removida: el basemap minimal con background color "#1a1208" ya cubre
+            todo lo no-Argentina. Sin mask geojson → sin tessellation artifacts. */}
       </MapGL>
 
       {/* === Leader lines (SVG sobre el mapa) === */}
@@ -738,6 +738,13 @@ function ProvinciaHUD({
   const evo = evolucion5Anios(serie, ai);
   const maxTop5 = top5[0]?.hechos ?? 1;
 
+  // Serie de 5 años por categoría para sparkline
+  const from = Math.max(0, ai - 4);
+  const top5Series = top5.map((r) => {
+    const s = serieProvincia(dataset, provIdx, r.id, "hechos");
+    return s.slice(from, ai + 1);
+  });
+
   return (
     <div className="pointer-events-auto absolute right-8 top-[160px] z-20 w-[360px] rounded-2xl border border-amber-300/30 bg-black/75 px-5 py-5 backdrop-blur-md anim-fade-up">
       <div className="flex items-start justify-between gap-2">
@@ -763,9 +770,14 @@ function ProvinciaHUD({
 
       {/* Top 5 delitos */}
       <div className="mt-5 border-t border-white/10 pt-4">
-        <div className="text-[9.5px] uppercase tracking-[0.18em] text-amber-300/85">Top 5 categorías · {anio}</div>
-        <ul className="mt-3 space-y-2">
-          {top5.map((r) => (
+        <div className="flex items-baseline justify-between">
+          <div className="text-[9.5px] uppercase tracking-[0.18em] text-amber-300/85">Top 5 categorías · {anio}</div>
+          <div className="text-[8.5px] uppercase tracking-[0.16em] text-white/35 mono">
+            evolución {anio - 4}–{anio}
+          </div>
+        </div>
+        <ul className="mt-3 space-y-3">
+          {top5.map((r, i) => (
             <li key={r.id} className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12px] text-white/90">{r.nombre}</div>
@@ -776,7 +788,8 @@ function ProvinciaHUD({
                   />
                 </div>
               </div>
-              <div className="text-right">
+              <Sparkline values={top5Series[i]} color="#fbbf24" width={64} height={20} />
+              <div className="w-[60px] text-right">
                 <div className="text-[11.5px] font-semibold text-white num">{r.hechos.toLocaleString("es-AR")}</div>
                 <div className="text-[9.5px] text-white/45 mono num">{r.pct.toFixed(1)}%</div>
               </div>
@@ -822,6 +835,13 @@ function DepartamentoHUD({
   const maxTop5 = top5[0]?.hechos ?? 1;
   void metric;
 
+  // Serie de 5 años por categoría para sparkline
+  const from = Math.max(0, ai - 4);
+  const top5Series = top5.map((r) => {
+    const s = serieDepartamento(dataset, depIdx, r.id, "hechos");
+    return s.slice(from, ai + 1);
+  });
+
   return (
     <div className="pointer-events-auto absolute right-8 top-[160px] z-20 w-[360px] rounded-2xl border border-amber-200/40 bg-black/75 px-5 py-5 backdrop-blur-md anim-fade-up">
       <div className="flex items-start justify-between gap-2">
@@ -846,9 +866,14 @@ function DepartamentoHUD({
       </div>
 
       <div className="mt-5 border-t border-white/10 pt-4">
-        <div className="text-[9.5px] uppercase tracking-[0.18em] text-amber-200/85">Top 5 categorías · {anio}</div>
-        <ul className="mt-3 space-y-2">
-          {top5.map((r) => (
+        <div className="flex items-baseline justify-between">
+          <div className="text-[9.5px] uppercase tracking-[0.18em] text-amber-200/85">Top 5 categorías · {anio}</div>
+          <div className="text-[8.5px] uppercase tracking-[0.16em] text-white/35 mono">
+            evolución {anio - 4}–{anio}
+          </div>
+        </div>
+        <ul className="mt-3 space-y-3">
+          {top5.map((r, i) => (
             <li key={r.id} className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12px] text-white/90">{r.nombre}</div>
@@ -857,7 +882,8 @@ function DepartamentoHUD({
                     style={{ width: `${(r.hechos / maxTop5) * 100}%` }} />
                 </div>
               </div>
-              <div className="text-right">
+              <Sparkline values={top5Series[i]} color="#fde68a" width={64} height={20} />
+              <div className="w-[60px] text-right">
                 <div className="text-[11.5px] font-semibold text-white num">{r.hechos.toLocaleString("es-AR")}</div>
                 <div className="text-[9.5px] text-white/45 mono num">{r.pct.toFixed(1)}%</div>
               </div>
@@ -866,6 +892,31 @@ function DepartamentoHUD({
         </ul>
       </div>
     </div>
+  );
+}
+
+/** Mini sparkline SVG (line + área tenue) para la evolución de una categoría. */
+function Sparkline({ values, color = "#fbbf24", width = 64, height = 18 }: { values: number[]; color?: string; width?: number; height?: number }) {
+  if (values.length < 2) {
+    return <svg width={width} height={height} aria-hidden="true" />;
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const px = (i: number) => (i / (values.length - 1)) * (width - 2) + 1;
+  const py = (v: number) => height - 2 - ((v - min) / range) * (height - 4);
+  const pts = values.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`);
+  const linePath = `M ${pts.join(" L ")}`;
+  const areaPath = `M ${px(0).toFixed(1)},${height - 1} L ${pts.join(" L ")} L ${px(values.length - 1).toFixed(1)},${height - 1} Z`;
+  // último punto destacado
+  const lastX = px(values.length - 1);
+  const lastY = py(values[values.length - 1]);
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+      <path d={areaPath} fill={color} fillOpacity="0.16" />
+      <path d={linePath} fill="none" stroke={color} strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lastX} cy={lastY} r="1.8" fill={color} />
+    </svg>
   );
 }
 
