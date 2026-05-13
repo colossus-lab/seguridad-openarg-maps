@@ -18,10 +18,14 @@ import { loadPaisGeojson, loadDepartamentosAll, loadMask } from "@/lib/data";
 import { computeIsobands } from "@/lib/isobands";
 import type { Dataset, Metric } from "@/lib/types";
 
-const BASE_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json";
+const BASE_STYLE = "https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json";
 
-// Paleta Cinder editorial.
-const CINDER = ["#1a1d24", "#3a2a3f", "#6e2a4a", "#b03a48", "#e8743a", "#f4c95d"];
+// Paleta ink-on-paper: del color natural del papel (cream) hasta tinta profunda.
+// Pensada para verse como una ilustración a tinta sobre papel sepia.
+const CINDER = ["#ebe0c4", "#d4b88a", "#b08458", "#984a3a", "#6e2a1a", "#2a1410"];
+const PAPER = "#f0e3c8";   // cream del papel (Argentina shape)
+const DESK = "#1a1208";    // dark desk (alrededor del papel)
+const INK = "#3a2418";     // ink color para borders
 const ARG_BBOX: [number, number, number, number] = [-74, -55.2, -53.5, -21.7];
 
 type Vista3DPaisProps = { onMapReady?: () => void };
@@ -191,21 +195,8 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     return m;
   }, [dataset, ai, di, metric]);
 
-  // Provincia seleccionada → polígono con altura proporcional para el extrusion editorial.
-  const provExtrusionFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
-    if (!paisGeo || !provinciaSel || valoresProv.size === 0) return null;
-    const f = paisGeo.features.find((x) => (x.properties as any).provincia_id === provinciaSel);
-    if (!f) return null;
-    const v = valoresProv.get(provinciaSel) ?? 0;
-    let max = 0;
-    valoresProv.forEach((x) => { if (x > max) max = x; });
-    const norm = max > 0 ? v / max : 0;
-    const height = Math.max(40000, Math.pow(norm, 0.6) * 220000);
-    return {
-      type: "FeatureCollection",
-      features: [{ ...f, properties: { ...(f.properties ?? {}), height, value: v } } as any],
-    };
-  }, [paisGeo, provinciaSel, valoresProv]);
+  // (Extrusion 3D removida — modo paper/ink no usa extrusion editorial)
+  void valoresProv;
 
   // ESC para deseleccionar (provincia o depto).
   useEffect(() => {
@@ -267,7 +258,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   if (!dataset) return null;
 
   return (
-    <div ref={wrapperRef} className="fixed inset-0 overflow-hidden" style={{ background: "#000" }}>
+    <div ref={wrapperRef} className="fixed inset-0 overflow-hidden paper-texture" style={{ background: DESK }}>
       <MapGL
         ref={mapRef}
         initialViewState={{ longitude: -63.5, latitude: -38.5, zoom: 3.7, pitch: 0, bearing: 0 }}
@@ -317,23 +308,23 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           const once = () => { m.off("idle", once); onMapReady(); };
           m.on("idle", once);
         }}
-        style={{ height: "100%", width: "100%", background: "#000" }}
+        style={{ height: "100%", width: "100%", background: DESK }}
         cursor={(nivel === "pais" ? hoverProvId : hoverDepId) ? "pointer" : "default"}
       >
         <NavigationControl position="bottom-left" visualizePitch={false} showCompass={false} showZoom />
 
-        {/* === Argentina backdrop: garantiza que cualquier hueco entre deptos quede en cinder[0] === */}
+        {/* === Argentina backdrop: el "papel" — cream uniforme. Garantiza no-gaps === */}
         {paisGeo && (
           <Source id="arg-backdrop" type="geojson" data={paisGeo}>
             <Layer
               id="arg-backdrop-fill"
               type="fill"
-              paint={{ "fill-color": CINDER[0], "fill-opacity": 1 }}
+              paint={{ "fill-color": PAPER, "fill-opacity": 1 }}
             />
           </Source>
         )}
 
-        {/* === Isobands halo (clipped to Argentina) === */}
+        {/* === Isobands halo (clipped to Argentina) — wash de tinta aguada === */}
         {isobandsFC && (
           <Source id="isobands" type="geojson" data={isobandsFC}>
             <Layer
@@ -345,7 +336,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
                   0, CINDER[0], 0.2, CINDER[1], 0.4, CINDER[2],
                   0.6, CINDER[3], 0.8, CINDER[4], 1, CINDER[5],
                 ],
-                "fill-opacity": 0.32,
+                "fill-opacity": 0.22,
                 "fill-antialias": true,
               }}
             />
@@ -366,16 +357,21 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
                 ],
                 "fill-opacity": [
                   "case",
-                  ["==", ["get", "departamento_id"], departamentoSel ?? "__none__"], 1,
-                  ["==", ["get", "departamento_id"], hoverDepId ?? "__none__"], 0.95,
-                  0.84,
+                  ["==", ["get", "departamento_id"], departamentoSel ?? "__none__"], 0.95,
+                  ["==", ["get", "departamento_id"], hoverDepId ?? "__none__"], 0.88,
+                  0.76,
                 ],
               }}
             />
             <Layer
               id="deps-border"
               type="line"
-              paint={{ "line-color": "#1f2329", "line-width": 0.5, "line-opacity": 0.9 }}
+              paint={{
+                "line-color": INK,
+                "line-width": 0.6,
+                "line-opacity": 0.55,
+                "line-blur": 0.3,
+              }}
             />
             <Layer
               id="deps-stroke-active"
@@ -383,8 +379,8 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
               paint={{
                 "line-color": [
                   "case",
-                  ["==", ["get", "departamento_id"], departamentoSel ?? "__none__"], "#fef3c7",
-                  ["==", ["get", "departamento_id"], hoverDepId ?? "__none__"], "#f4c95d",
+                  ["==", ["get", "departamento_id"], departamentoSel ?? "__none__"], "#1a0c08",
+                  ["==", ["get", "departamento_id"], hoverDepId ?? "__none__"], "#3a2418",
                   "rgba(0,0,0,0)",
                 ],
                 "line-width": [
@@ -399,60 +395,55 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           </Source>
         )}
 
-        {/* === Province outlines + hover/select highlight === */}
+        {/* === Province outlines tipo trazo a tinta gruesa === */}
         {paisGeo && (
           <Source id="prov-outline" type="geojson" data={paisGeo}>
+            {/* Sombra inferior simulando el grosor irregular de la tinta */}
+            <Layer
+              id="prov-line-ink-shadow"
+              type="line"
+              paint={{
+                "line-color": INK,
+                "line-width": 2.4,
+                "line-opacity": 0.25,
+                "line-blur": 1.6,
+              }}
+            />
             <Layer
               id="prov-line"
               type="line"
               paint={{
                 "line-color": [
                   "case",
-                  ["==", ["get", "provincia_id"], provinciaSel ?? "__none__"], "#f4c95d",
-                  ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], "#e8743a",
-                  "#3a4452",
+                  ["==", ["get", "provincia_id"], provinciaSel ?? "__none__"], "#1a0c08",
+                  ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], "#5a3a26",
+                  INK,
                 ],
                 "line-width": [
                   "case",
-                  ["==", ["get", "provincia_id"], provinciaSel ?? "__none__"], 2.2,
-                  ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], 1.4,
-                  0.8,
+                  ["==", ["get", "provincia_id"], provinciaSel ?? "__none__"], 1.8,
+                  ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], 1.3,
+                  1.05,
                 ],
                 "line-opacity": [
                   "case",
                   ["==", ["get", "provincia_id"], provinciaSel ?? "__none__"], 1,
-                  ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], 0.9,
-                  0.55,
+                  ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], 0.92,
+                  0.85,
                 ],
+                "line-blur": 0.35,
               }}
             />
           </Source>
         )}
 
-        {/* === Extrusion editorial: SÓLO la provincia seleccionada se eleva === */}
-        {provExtrusionFC && (
-          <Source id="prov-extrusion" type="geojson" data={provExtrusionFC}>
-            <Layer
-              id="prov-extrusion-fill"
-              type="fill-extrusion"
-              paint={{
-                "fill-extrusion-color": CINDER[5],
-                "fill-extrusion-height": ["get", "height"],
-                "fill-extrusion-base": 0,
-                "fill-extrusion-opacity": 0.45,
-                "fill-extrusion-vertical-gradient": true,
-              }}
-            />
-          </Source>
-        )}
-
-        {/* === MASK: tapa todo lo que está fuera de Argentina con negro === */}
+        {/* === MASK: tapa todo lo que está fuera de Argentina con el color del escritorio === */}
         {maskGeo && (
           <Source id="world-mask" type="geojson" data={maskGeo}>
             <Layer
               id="world-mask-fill"
               type="fill"
-              paint={{ "fill-color": "#000", "fill-opacity": 0.95, "fill-antialias": false }}
+              paint={{ "fill-color": DESK, "fill-opacity": 0.98, "fill-antialias": false }}
             />
           </Source>
         )}

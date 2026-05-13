@@ -67,6 +67,30 @@ h1, h2, h3, h4 { letter-spacing: -0.022em; font-weight: 600; }
   letter-spacing: -0.012em;
 }
 
+/* Paper texture: grain orgánico sobre el área del mapa que simula papel envejecido.
+   Se aplica como ::after sobre el wrapper, mix-blend-mode multiply para que oscurezca
+   sólo donde hay color (no afecta al desk negro alrededor). */
+.paper-texture::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch' seed='3'/><feColorMatrix values='0 0 0 0 0.16  0 0 0 0 0.10  0 0 0 0 0.06  0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>");
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}
+
+/* Sombra del papel sobre el escritorio (simula el papel apoyado, leve drop-shadow) */
+.paper-texture::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background: radial-gradient(ellipse 60% 65% at 50% 50%, transparent 60%, rgba(0,0,0,0.35) 100%);
+}
+
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
