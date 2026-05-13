@@ -1,0 +1,4 @@
+scripts/tmp
+.next
+node_modules
+*.tsbuildinfo
