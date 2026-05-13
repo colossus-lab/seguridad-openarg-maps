@@ -9,8 +9,18 @@ const LINES = [
   "Sistema Nacional de Información Criminal",
 ];
 
+const SS_KEY = "colossus_intro_seen";
+
 export default function IntroScreen({ progress }: { progress: number }) {
   const { intro, setIntro } = useDashboard();
+
+  // En primera visita de la sesión: mostrar intro. Si ya se vió: skip.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.sessionStorage.getItem(SS_KEY) === "1") {
+      setIntro("done");
+    }
+  }, [setIntro]);
   const [step, step_] = useState(0);
   const [typed, setTyped] = useState("");
   const [hide, setHide] = useState(false);
@@ -34,8 +44,11 @@ export default function IntroScreen({ progress }: { progress: number }) {
     if (intro === "ready" && step >= LINES.length - 1) {
       const id = setTimeout(() => {
         setHide(true);
-        setTimeout(() => setIntro("done"), 950);
-      }, 800);
+        setTimeout(() => {
+          if (typeof window !== "undefined") window.sessionStorage.setItem(SS_KEY, "1");
+          setIntro("done");
+        }, 950);
+      }, 600);
       return () => clearTimeout(id);
     }
   }, [intro, step, setIntro]);
@@ -44,7 +57,10 @@ export default function IntroScreen({ progress }: { progress: number }) {
 
   const skipNow = () => {
     setHide(true);
-    setTimeout(() => setIntro("done"), 950);
+    setTimeout(() => {
+      if (typeof window !== "undefined") window.sessionStorage.setItem(SS_KEY, "1");
+      setIntro("done");
+    }, 950);
   };
 
   return (

@@ -231,120 +231,7 @@ export default function Vista3DPais() {
   if (!dataset) return null;
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Barra de control */}
-      <section className="rounded-2xl border border-line-subtle bg-gradient-to-br from-white via-white to-paper/70 p-6 shadow-[0_8px_24px_-16px_rgba(16,18,21,0.12)]">
-        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3 border-b border-line-subtle pb-3">
-          <div className="flex items-baseline gap-5">
-            <div>
-              <div className="eyebrow">Total Argentina · {anio}</div>
-              <div className="mt-0.5 text-[22px] font-semibold leading-none tracking-tight text-ink num">
-                {totalAll.toLocaleString("es-AR")}
-              </div>
-              <div className="mt-0.5 text-[11px] text-ink-3">hechos agregados de todas las categorías</div>
-            </div>
-            <div className="h-10 w-px bg-line" />
-            <div>
-              <div className="eyebrow">Cobertura</div>
-              <div className="mt-0.5 text-[22px] font-semibold leading-none tracking-tight text-ink num">
-                {dataset.provincias.length}<span className="text-[14px] text-ink-3"> / {dataset.departamentos.length}</span>
-              </div>
-              <div className="mt-0.5 text-[11px] text-ink-3">provincias / departamentos</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-[11px] text-ink-3">
-              Categoría: <span className="font-semibold text-ink">{totalSel.toLocaleString("es-AR")}</span> hechos
-            </div>
-            <div className="inline-flex overflow-hidden rounded-md border border-line bg-paper">
-              {(["2d", "3d"] as const).map((m, i) => (
-                <button
-                  key={m}
-                  onClick={() => setViewMode(m)}
-                  className={[
-                    "press-feedback px-3 py-1.5 text-[11.5px] font-semibold uppercase tracking-wider transition",
-                    i === 0 ? "border-r border-line" : "",
-                    viewMode === m ? "bg-ink text-paper" : "text-ink-2 hover:text-ink",
-                  ].join(" ")}
-                >
-                  {m.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-          <label className="flex min-w-0 flex-col gap-2">
-            <span className="eyebrow">Tipo de delito</span>
-            <select
-              value={delitoId}
-              onChange={(e) => setDelito(e.target.value)}
-              className="rounded-md border border-line bg-paper px-3 py-2.5 text-[14px] text-ink outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-            >
-              <option value="all">— Todos los delitos (suma SNIC) —</option>
-              {dataset.delitos.map((d) => (
-                <option key={d.id} value={d.id}>{d.nombre}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-2">
-            <span className="eyebrow">Métrica</span>
-            <div className="inline-flex overflow-hidden rounded-md border border-line bg-paper">
-              {(["tasa", "hechos"] as const).map((m, i) => (
-                <button
-                  key={m}
-                  onClick={() => setMetric(m)}
-                  className={[
-                    "press-feedback px-4 py-2.5 text-[13px] font-medium transition",
-                    i === 0 ? "border-r border-line" : "",
-                    metric === m ? "bg-ink text-paper" : "text-ink-2 hover:text-ink",
-                  ].join(" ")}
-                >
-                  {m === "tasa" ? "Tasa /100k" : "Hechos"}
-                </button>
-              ))}
-            </div>
-          </label>
-
-          <label className="flex min-w-0 flex-col gap-2">
-            <span className="flex items-baseline justify-between">
-              <span className="eyebrow">Año</span>
-              <span className="mono num text-[14px] font-semibold text-ink">{anio}</span>
-            </span>
-            <div className="relative pt-7">
-              <div
-                className="slider-tooltip"
-                style={{
-                  left: `${(
-                    (anio - dataset.anios[0]) /
-                    (dataset.anios[dataset.anios.length - 1] - dataset.anios[0])
-                  ) * 100}%`,
-                }}
-              >
-                {anio}
-              </div>
-              <input
-                type="range"
-                min={dataset.anios[0]}
-                max={dataset.anios[dataset.anios.length - 1]}
-                step={1}
-                value={anio}
-                onChange={(e) => setAnio(Number(e.target.value))}
-                className="w-full"
-              />
-            </div>
-            <div className="flex justify-between text-[10.5px] text-ink-4 mono num">
-              <span>{dataset.anios[0]}</span>
-              <span>{dataset.anios[dataset.anios.length - 1]}</span>
-            </div>
-          </label>
-        </div>
-      </section>
-
-      {/* Mapa */}
-      <div ref={wrapperRef} className="relative h-[720px] overflow-hidden rounded-2xl border border-emerald-900/30 shadow-[0_24px_60px_-20px_rgba(0,75,55,0.3)] map-vignette map-grain">
+    <div ref={wrapperRef} className="fixed inset-0 overflow-hidden map-grain map-vignette" style={{ background: "#050a14" }}>
         <MapGL
           ref={mapRef}
           initialViewState={{
@@ -384,7 +271,7 @@ export default function Vista3DPais() {
           ]}
           style={{ height: "100%", width: "100%", background: "#050a14" }}
         >
-          <NavigationControl position="top-right" visualizePitch showCompass showZoom />
+          <NavigationControl position="bottom-left" visualizePitch showCompass showZoom />
 
           {/* Tech grid sutil tipo blueprint */}
           <Source id="tech-grid" type="geojson" data={buildTechGrid()}>
@@ -614,7 +501,7 @@ export default function Vista3DPais() {
         </MapGL>
 
         {/* Leyenda */}
-        <div className="pointer-events-none absolute left-5 top-5 z-10 w-[310px] rounded-xl glass-card p-3.5 anim-fade-up">
+        <div className="pointer-events-none absolute left-6 top-[72px] z-10 w-[300px] rounded-xl glass-card p-3.5 anim-fade-up">
           <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
             Vista {viewMode.toUpperCase()} · {anio} · {nivel === "pais" ? "País" : "Provincia"}
           </div>
@@ -650,17 +537,6 @@ export default function Vista3DPais() {
           />
         )}
 
-        {/* Botones */}
-        <div className="absolute bottom-5 right-5 z-10 flex gap-2">
-          {nivel === "provincia" && (
-            <button
-              onClick={() => reset()}
-              className="rounded-lg border border-emerald-400/60 bg-emerald-500/20 px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-100 backdrop-blur-md transition hover:border-emerald-300 hover:bg-emerald-500/35 hover:text-white"
-            >
-              ↺ Volver al país
-            </button>
-          )}
-        </div>
 
         {/* Loading overlay */}
         {loadingProv && (
@@ -675,7 +551,7 @@ export default function Vista3DPais() {
         )}
 
         {/* Breadcrumb */}
-        <div className="absolute left-5 bottom-5 z-10 rounded-lg glass-card px-3.5 py-2 text-[11.5px] text-emerald-300/90">
+        <div className="absolute left-1/2 top-[80px] z-20 -translate-x-1/2 rounded-full glass-card px-4 py-2 text-[11.5px] text-emerald-300/90 anim-fade-up flex items-center gap-2">
           <button
             onClick={() => reset()}
             className={nivel === "pais" ? "font-semibold text-white" : "underline-offset-2 hover:underline"}
@@ -698,16 +574,191 @@ export default function Vista3DPais() {
               </span>
             </>
           )}
+          {nivel === "provincia" && (
+            <button
+              onClick={() => reset()}
+              className="press-feedback ml-2 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-200 transition hover:bg-emerald-500/30 hover:text-white"
+              title="Volver al país"
+            >
+              ↺ país
+            </button>
+          )}
+        </div>
+
+      {/* === Header flotante === */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-30">
+        <div className="pointer-events-auto mx-auto flex max-w-[1480px] items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-3 rounded-full glass-card px-4 py-1.5">
+            <span className="relative inline-flex h-2 w-2">
+              <span className="absolute inset-0 rounded-full bg-emerald-500 halo-expand" />
+              <span className="absolute inset-0 rounded-full bg-emerald-500" />
+            </span>
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.24em] text-white/90">
+              Colossus Lab
+            </span>
+            <span className="h-3 w-px bg-emerald-400/30" />
+            <span className="text-[10.5px] uppercase tracking-[0.22em] text-emerald-300/80">
+              Observatorio · Seguridad
+            </span>
+          </div>
+          <nav className="flex items-center gap-2">
+            <a
+              href="https://www.colossuslab.org"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full glass-card px-3.5 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/80 transition hover:text-white"
+            >
+              colossuslab.org
+            </a>
+            <a
+              href="https://www.argentina.gob.ar/seguridad/estadisticascriminales"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full glass-card px-3.5 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/80 transition hover:text-white"
+            >
+              Fuente SNIC ↗
+            </a>
+          </nav>
+        </div>
+
+        {/* KPI chip top-right */}
+        <div className="pointer-events-none absolute right-6 top-[72px]">
+          <div className="rounded-xl glass-card px-4 py-3 anim-fade-up">
+            <div className="eyebrow text-emerald-400/90">Mapa de inseguridad · Argentina</div>
+            <div className="mt-1.5 flex items-baseline gap-3 num">
+              <Kpi big={dataset.provincias.length} suffix="prov." />
+              <span className="text-emerald-400/30">·</span>
+              <Kpi big={dataset.departamentos.length} suffix="deps." />
+              <span className="text-emerald-400/30">·</span>
+              <Kpi big={dataset.delitos.length} suffix="delitos" />
+              <span className="text-emerald-400/30">·</span>
+              <Kpi big={`${dataset.anios[0]}–${dataset.anios[dataset.anios.length - 1]}`} suffix="años" mono />
+            </div>
+          </div>
         </div>
       </div>
 
-      <p className="text-[12px] leading-relaxed text-ink-3">
-        <strong>Lectura:</strong> en la vista país cada hexágono se colorea y eleva según la métrica
-        de su <em>provincia</em>. Al hacer click sobre una provincia el mapa hace zoom y carga un
-        hexgrid más fino donde la métrica se refleja por <em>departamento</em>. La paleta cromática
-        se calcula por percentil para mantener contraste aun con distribuciones sesgadas.
-      </p>
-    </div>
+      {/* === Panel de filtros flotante (bottom) === */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 pb-6">
+        <div className="pointer-events-auto mx-auto max-w-[1080px] px-6">
+          <div className="rounded-2xl glass-card px-5 py-4 anim-fade-up">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <div className="flex items-baseline gap-4">
+                <div>
+                  <div className="eyebrow text-emerald-400/90">Total · {anio}</div>
+                  <div className="mt-0.5 text-[20px] font-semibold leading-none tracking-tight text-white num">
+                    {totalSel.toLocaleString("es-AR")}
+                  </div>
+                </div>
+                <div className="h-9 w-px bg-emerald-400/20" />
+                <div>
+                  <div className="eyebrow text-emerald-400/90">Total agregado</div>
+                  <div className="mt-0.5 text-[14px] text-white/80 num">
+                    {totalAll.toLocaleString("es-AR")}
+                    <span className="text-emerald-300/60"> hechos</span>
+                  </div>
+                </div>
+              </div>
+              <div className="inline-flex overflow-hidden rounded-md border border-emerald-400/30 bg-[#0a1422]/60">
+                {(["2d", "3d"] as const).map((m, i) => (
+                  <button
+                    key={m}
+                    onClick={() => setViewMode(m)}
+                    className={[
+                      "press-feedback px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wider transition",
+                      i === 0 ? "border-r border-emerald-400/30" : "",
+                      viewMode === m ? "bg-emerald-500 text-[#0a1220]" : "text-emerald-200/75 hover:text-white",
+                    ].join(" ")}
+                  >
+                    {m.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_auto_minmax(0,1fr)] md:items-end">
+              <label className="flex min-w-0 flex-col gap-1.5">
+                <span className="eyebrow text-emerald-400/90">Tipo de delito</span>
+                <select
+                  value={delitoId}
+                  onChange={(e) => setDelito(e.target.value)}
+                  className="rounded-md border border-emerald-400/30 bg-[#0a1422]/70 px-3 py-2 text-[13px] text-white outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30"
+                >
+                  <option value="all">— Todos los delitos (suma SNIC) —</option>
+                  {dataset.delitos.map((d) => (
+                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="eyebrow text-emerald-400/90">Métrica</span>
+                <div className="inline-flex overflow-hidden rounded-md border border-emerald-400/30 bg-[#0a1422]/70">
+                  {(["tasa", "hechos"] as const).map((m, i) => (
+                    <button
+                      key={m}
+                      onClick={() => setMetric(m)}
+                      className={[
+                        "press-feedback px-4 py-2 text-[12px] font-medium transition",
+                        i === 0 ? "border-r border-emerald-400/30" : "",
+                        metric === m ? "bg-emerald-500 text-[#0a1220]" : "text-emerald-200/75 hover:text-white",
+                      ].join(" ")}
+                    >
+                      {m === "tasa" ? "Tasa /100k" : "Hechos"}
+                    </button>
+                  ))}
+                </div>
+              </label>
+
+              <label className="flex min-w-0 flex-col gap-1.5">
+                <span className="flex items-baseline justify-between">
+                  <span className="eyebrow text-emerald-400/90">Año</span>
+                  <span className="mono num text-[12px] font-semibold text-white">{anio}</span>
+                </span>
+                <div className="relative pt-6">
+                  <div
+                    className="slider-tooltip"
+                    style={{
+                      left: `${(
+                        (anio - dataset.anios[0]) /
+                        (dataset.anios[dataset.anios.length - 1] - dataset.anios[0])
+                      ) * 100}%`,
+                    }}
+                  >
+                    {anio}
+                  </div>
+                  <input
+                    type="range"
+                    min={dataset.anios[0]}
+                    max={dataset.anios[dataset.anios.length - 1]}
+                    step={1}
+                    value={anio}
+                    onChange={(e) => setAnio(Number(e.target.value))}
+                    className="w-full"
+                  />
+                  <div className="mt-0.5 flex justify-between text-[9.5px] text-emerald-300/55 mono num">
+                    <span>{dataset.anios[0]}</span>
+                    <span>{dataset.anios[dataset.anios.length - 1]}</span>
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      </div>
+  );
+}
+
+function Kpi({ big, suffix, mono = false }: { big: number | string; suffix: string; mono?: boolean }) {
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <span className={`text-[16px] font-semibold leading-none tracking-tight text-white ${mono ? "mono" : ""}`}>
+        {big}
+      </span>
+      <span className="text-[10px] uppercase tracking-[0.16em] text-emerald-300/70">{suffix}</span>
+    </span>
   );
 }
 
@@ -745,7 +796,9 @@ function enrichHexgrid(
   getValue: (props: HexProps) => number,
   smooth = true,
 ): GeoJSON.FeatureCollection {
-  const MAX_HEIGHT = 90000; // unidades del mapa (proyección Mercator)
+  // En MapLibre fill-extrusion-height son metros. A escala país (zoom 3-4)
+  // necesitamos columnas grandes para que se noten. Mínimo bumpeado también.
+  const MAX_HEIGHT = 350000;
   const rawValues = fc.features.map((f) => getValue(f.properties as HexProps));
 
   // Smoothing por vecinos baked en el geojson — DOBLE PASADA para gradiente muy soft.
@@ -800,7 +853,9 @@ function enrichHexgrid(
         departamento_id: p.departamento_id ?? null,
         value: v,
         intensity,
-        height: v > 0 ? Math.max(800, visualH * MAX_HEIGHT) : 0,
+        // Mínimo visible aún para cells de bajo valor, para que ninguna provincia
+        // quede aplanada y se pierda en el fondo oscuro.
+        height: v > 0 ? Math.max(MAX_HEIGHT * 0.08, visualH * MAX_HEIGHT) : 0,
       },
     };
   });
@@ -865,7 +920,7 @@ function HoverInfo({
   const unidad = metric === "tasa" ? " /100k" : " hechos";
 
   return (
-    <div className="pointer-events-none absolute right-5 top-5 z-10 w-[250px] rounded-xl glass-card p-3.5 anim-fade-up">
+    <div className="pointer-events-none absolute right-6 top-[160px] z-10 w-[260px] rounded-xl glass-card p-3.5 anim-fade-up">
       <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
         {secondaryLabel}
       </div>
