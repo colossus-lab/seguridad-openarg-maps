@@ -111,7 +111,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
       const c = (f?.properties as any)?.centroid as [number, number] | undefined;
       if (c) {
         const pad = isMobile
-          ? { top: 64, right: 40, bottom: 320, left: 40 }
+          ? { top: 64, right: 24, bottom: 240, left: 24 }
           : { top: 0, right: 380, bottom: 0, left: 340 };
         map.easeTo({
           center: c, zoom: 7.2, pitch: 42, bearing: 0,
@@ -124,7 +124,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
       if (!prov) return;
       const bb = bboxOf(prov);
       const pad = isMobile
-        ? { top: 100, right: 40, bottom: 320, left: 40 }   // bottom-sheet HUD ~280px
+        ? { top: 100, right: 24, bottom: 240, left: 24 }   // bottom-sheet HUD ~32vh
         : { top: 100, right: 380, bottom: 100, left: 340 };
       map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], {
         padding: pad,
@@ -894,13 +894,25 @@ function ProvinciaHUD({
     return s.slice(from, ai + 1);
   });
 
+  const [expanded, setExpanded] = useState(false);
   const containerCls = isMobile
-    ? "pointer-events-auto fixed inset-x-0 bottom-0 z-20 max-h-[60vh] overflow-y-auto rounded-t-2xl border-t border-amber-300/30 bg-black/85 px-5 pb-7 pt-4 backdrop-blur-md anim-fade-up"
+    ? `pointer-events-auto fixed inset-x-0 bottom-0 z-20 overflow-y-auto rounded-t-2xl border-t border-amber-300/30 bg-black/90 px-5 pb-6 pt-3 backdrop-blur-md anim-fade-up transition-[max-height] duration-300 ${expanded ? "max-h-[78vh]" : "max-h-[32vh]"}`
     : "pointer-events-auto absolute right-8 top-[160px] z-20 w-[360px] rounded-2xl border border-amber-300/30 bg-black/75 px-5 py-5 backdrop-blur-md anim-fade-up";
 
   return (
     <div className={containerCls}>
-      {isMobile && <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-white/15" />}
+      {isMobile && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="-mx-5 -mt-3 mb-2 flex w-[calc(100%+2.5rem)] flex-col items-center gap-1 px-5 py-2"
+          aria-label={expanded ? "Contraer panel" : "Expandir panel"}
+        >
+          <div className="h-1 w-12 rounded-full bg-white/20" />
+          <span className="text-[9px] uppercase tracking-[0.2em] text-white/40">
+            {expanded ? "Tap para contraer" : "Tap para ver top 5 ↑"}
+          </span>
+        </button>
+      )}
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-[10px] uppercase tracking-[0.22em] text-amber-300/80">Provincia</div>
@@ -923,37 +935,39 @@ function ProvinciaHUD({
       </div>
 
       {/* Top 5 delitos */}
-      <div className="mt-5 border-t border-white/10 pt-4">
-        <div className="flex items-baseline justify-between">
-          <div className="text-[9.5px] uppercase tracking-[0.18em] text-amber-300/85">Top 5 categorías · {anio}</div>
-          <div className="text-[8.5px] uppercase tracking-[0.16em] text-white/35 mono">
-            evolución {anio - 4}–{anio}
+      {(!isMobile || expanded) && (
+        <div className="mt-5 border-t border-white/10 pt-4">
+          <div className="flex items-baseline justify-between">
+            <div className="text-[9.5px] uppercase tracking-[0.18em] text-amber-300/85">Top 5 categorías · {anio}</div>
+            <div className="text-[8.5px] uppercase tracking-[0.16em] text-white/35 mono">
+              evolución {anio - 4}–{anio}
+            </div>
           </div>
-        </div>
-        <ul className="mt-3 space-y-3">
-          {top5.map((r, i) => (
-            <li key={r.id} className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[12px] text-white/90">{r.nombre}</div>
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/8">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-300"
-                    style={{ width: `${(r.hechos / maxTop5) * 100}%` }}
-                  />
+          <ul className="mt-3 space-y-3">
+            {top5.map((r, i) => (
+              <li key={r.id} className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12px] text-white/90">{r.nombre}</div>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/8">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-300"
+                      style={{ width: `${(r.hechos / maxTop5) * 100}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-              <Sparkline values={top5Series[i]} color="#fbbf24" width={64} height={20} />
-              <div className="w-[60px] text-right">
-                <div className="text-[11.5px] font-semibold text-white num">{r.hechos.toLocaleString("es-AR")}</div>
-                <div className="text-[9.5px] text-white/45 mono num">{r.pct.toFixed(1)}%</div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+                <Sparkline values={top5Series[i]} color="#fbbf24" width={64} height={20} />
+                <div className="w-[60px] text-right">
+                  <div className="text-[11.5px] font-semibold text-white num">{r.hechos.toLocaleString("es-AR")}</div>
+                  <div className="text-[9.5px] text-white/45 mono num">{r.pct.toFixed(1)}%</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-4 border-t border-white/10 pt-3 text-[10px] leading-snug text-white/45">
-        Click un departamento para drill-in · ESC para volver al país
+        {isMobile ? "Tap un departamento para drill-in · ✕ vuelve al país" : "Click un departamento para drill-in · ESC para volver al país"}
       </div>
     </div>
   );
@@ -997,13 +1011,25 @@ function DepartamentoHUD({
     return s.slice(from, ai + 1);
   });
 
+  const [expanded, setExpanded] = useState(false);
   const containerCls = isMobile
-    ? "pointer-events-auto fixed inset-x-0 bottom-0 z-20 max-h-[60vh] overflow-y-auto rounded-t-2xl border-t border-amber-200/40 bg-black/85 px-5 pb-7 pt-4 backdrop-blur-md anim-fade-up"
+    ? `pointer-events-auto fixed inset-x-0 bottom-0 z-20 overflow-y-auto rounded-t-2xl border-t border-amber-200/40 bg-black/90 px-5 pb-6 pt-3 backdrop-blur-md anim-fade-up transition-[max-height] duration-300 ${expanded ? "max-h-[78vh]" : "max-h-[34vh]"}`
     : "pointer-events-auto absolute right-8 top-[160px] z-20 w-[360px] rounded-2xl border border-amber-200/40 bg-black/75 px-5 py-5 backdrop-blur-md anim-fade-up";
 
   return (
     <div className={containerCls}>
-      {isMobile && <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-white/15" />}
+      {isMobile && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="-mx-5 -mt-3 mb-2 flex w-[calc(100%+2.5rem)] flex-col items-center gap-1 px-5 py-2"
+          aria-label={expanded ? "Contraer panel" : "Expandir panel"}
+        >
+          <div className="h-1 w-12 rounded-full bg-white/20" />
+          <span className="text-[9px] uppercase tracking-[0.2em] text-white/40">
+            {expanded ? "Tap para contraer" : "Tap para ver top 5 ↑"}
+          </span>
+        </button>
+      )}
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-[10px] uppercase tracking-[0.22em] text-amber-200/85">Departamento</div>
@@ -1025,32 +1051,34 @@ function DepartamentoHUD({
         } />
       </div>
 
-      <div className="mt-5 border-t border-white/10 pt-4">
-        <div className="flex items-baseline justify-between">
-          <div className="text-[9.5px] uppercase tracking-[0.18em] text-amber-200/85">Top 5 categorías · {anio}</div>
-          <div className="text-[8.5px] uppercase tracking-[0.16em] text-white/35 mono">
-            evolución {anio - 4}–{anio}
+      {(!isMobile || expanded) && (
+        <div className="mt-5 border-t border-white/10 pt-4">
+          <div className="flex items-baseline justify-between">
+            <div className="text-[9.5px] uppercase tracking-[0.18em] text-amber-200/85">Top 5 categorías · {anio}</div>
+            <div className="text-[8.5px] uppercase tracking-[0.16em] text-white/35 mono">
+              evolución {anio - 4}–{anio}
+            </div>
           </div>
-        </div>
-        <ul className="mt-3 space-y-3">
-          {top5.map((r, i) => (
-            <li key={r.id} className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[12px] text-white/90">{r.nombre}</div>
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/8">
-                  <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-amber-100"
-                    style={{ width: `${(r.hechos / maxTop5) * 100}%` }} />
+          <ul className="mt-3 space-y-3">
+            {top5.map((r, i) => (
+              <li key={r.id} className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12px] text-white/90">{r.nombre}</div>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/8">
+                    <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-amber-100"
+                      style={{ width: `${(r.hechos / maxTop5) * 100}%` }} />
+                  </div>
                 </div>
-              </div>
-              <Sparkline values={top5Series[i]} color="#fde68a" width={64} height={20} />
-              <div className="w-[60px] text-right">
-                <div className="text-[11.5px] font-semibold text-white num">{r.hechos.toLocaleString("es-AR")}</div>
-                <div className="text-[9.5px] text-white/45 mono num">{r.pct.toFixed(1)}%</div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+                <Sparkline values={top5Series[i]} color="#fde68a" width={64} height={20} />
+                <div className="w-[60px] text-right">
+                  <div className="text-[11.5px] font-semibold text-white num">{r.hechos.toLocaleString("es-AR")}</div>
+                  <div className="text-[9.5px] text-white/45 mono num">{r.pct.toFixed(1)}%</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
