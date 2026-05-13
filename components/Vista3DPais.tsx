@@ -341,13 +341,13 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
 
           {nivel === "pais" && hexPaisEnriched && (
             <Source id="hex-pais" type="geojson" data={hexPaisEnriched}>
-              {/* Capa glow plana — halo emisor debajo de la extrusión */}
+              {/* Glow ground layer (halo emisor proyectado sobre el suelo) */}
               <Layer
-                id="hex-pais-glow"
+                id="hex-pais-ground-glow"
                 type="fill"
                 paint={{
                   "fill-color": colorInterpolate(),
-                  "fill-opacity": 0.18,
+                  "fill-opacity": 0.22,
                   "fill-antialias": true,
                 }}
               />
@@ -359,12 +359,12 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
                     "fill-extrusion-height": [
                       "case",
                       ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"],
-                      ["*", ["get", "height"], 1.18],
+                      ["*", ["get", "height"], 1.15],
                       ["get", "height"],
                     ],
                     "fill-extrusion-base": 0,
                     "fill-extrusion-color": colorInterpolate(),
-                    "fill-extrusion-opacity": 0.82,
+                    "fill-extrusion-opacity": 0.55,
                     "fill-extrusion-vertical-gradient": true,
                   }}
                 />
@@ -451,6 +451,16 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
 
           {nivel === "provincia" && hexProvEnriched && (
             <Source id="hex-prov" type="geojson" data={hexProvEnriched}>
+              {/* Ground glow para la provincia también */}
+              <Layer
+                id="hex-prov-ground-glow"
+                type="fill"
+                paint={{
+                  "fill-color": colorInterpolate(),
+                  "fill-opacity": 0.2,
+                  "fill-antialias": true,
+                }}
+              />
               {viewMode === "3d" ? (
                 <Layer
                   id="hex-prov-3d"
@@ -459,9 +469,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
                     "fill-extrusion-height": ["get", "height"],
                     "fill-extrusion-base": 0,
                     "fill-extrusion-color": colorInterpolate(),
-                    "fill-extrusion-opacity": departamentoSel
-                      ? ["case", ["==", ["get", "departamento_id"], departamentoSel], 0.9, 0.22]
-                      : 0.78,
+                    "fill-extrusion-opacity": 0.6,
                     "fill-extrusion-vertical-gradient": true,
                   }}
                 />
@@ -522,7 +530,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             {totalSel.toLocaleString("es-AR")} hechos nacionales
           </div>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full" style={{
-            background: "linear-gradient(90deg, #004e3b 0%, #009767 20%, #00bb7f 50%, #edb200 80%, #ef4444 100%)",
+            background: "linear-gradient(90deg, #063d3f 0%, #0a98a8 16%, #22e7e0 32%, #7ef0c2 50%, #fde047 66%, #fb923c 80%, #f43f5e 92%, #c026d3 100%)",
           }} />
           <div className="mt-1 flex justify-between text-[10px] text-emerald-300/70 num">
             <span>bajo</span><span>medio</span><span>alto</span>
@@ -806,41 +814,37 @@ function enrichHexgrid(
   getValue: (props: HexProps) => number,
   smooth = true,
 ): GeoJSON.FeatureCollection {
-  // En MapLibre fill-extrusion-height son metros. A escala país (zoom 3-4)
-  // las columnas se tienen que ver fuerte → MAX_HEIGHT muy alto.
-  const MAX_HEIGHT = 850000;
+  // Look "océano holográfico": amplitud moderada + smoothing también en altura.
+  const MAX_HEIGHT = 420000;
   const rawValues = fc.features.map((f) => getValue(f.properties as HexProps));
 
-  // Smoothing por vecinos baked: usa SÓLO para color (gradiente soft).
-  // La ALTURA usa los valores raw → peaks por provincia quedan visibles.
-  let smoothedValues = rawValues;
-  if (smooth) {
-    const blur = (input: number[]) => {
-      const out = new Array(input.length);
-      for (let i = 0; i < fc.features.length; i++) {
-        const neighbors = ((fc.features[i].properties as HexProps).n) ?? [];
-        const k = neighbors.length;
-        if (k === 0) { out[i] = input[i]; continue; }
-        let s = input[i] * 0.45;
-        let wTotal = 0.45;
-        const wEach = 0.55 / Math.max(1, k);
-        for (const nIdx of neighbors) {
-          s += input[nIdx] * wEach;
-          wTotal += wEach;
-        }
-        out[i] = s / wTotal;
+  const blur = (input: number[]) => {
+    const out = new Array(input.length);
+    for (let i = 0; i < fc.features.length; i++) {
+      const neighbors = ((fc.features[i].properties as HexProps).n) ?? [];
+      const k = neighbors.length;
+      if (k === 0) { out[i] = input[i]; continue; }
+      let s = input[i] * 0.4;
+      let wTotal = 0.4;
+      const wEach = 0.6 / Math.max(1, k);
+      for (const nIdx of neighbors) {
+        s += input[nIdx] * wEach;
+        wTotal += wEach;
       }
-      return out;
-    };
-    smoothedValues = blur(blur(rawValues));
-  }
+      out[i] = s / wTotal;
+    }
+    return out;
+  };
 
-  // globalMax para height usa los valores RAW (preserva el peak real).
-  let rawMax = 0;
-  for (const v of rawValues) if (v > rawMax) rawMax = v;
+  // Color: doble smoothing → gradiente súper suave entre provincias.
+  // Altura: smoothing simple → suaviza los plateaus pero peaks siguen visibles.
+  const colorValues = smooth ? blur(blur(rawValues)) : rawValues;
+  const heightValues = smooth ? blur(rawValues) : rawValues;
 
-  // Percentile rank para COLOR usa los valores smoothed (soft).
-  const positives = smoothedValues.filter((v) => v > 0).slice().sort((a, b) => a - b);
+  let heightMax = 0;
+  for (const v of heightValues) if (v > heightMax) heightMax = v;
+
+  const positives = colorValues.filter((v) => v > 0).slice().sort((a, b) => a - b);
   const N = positives.length;
   const percentileOf = (v: number): number => {
     if (v <= 0 || N === 0) return 0;
@@ -853,14 +857,14 @@ function enrichHexgrid(
     return lo / N;
   };
 
-  const MIN_FLOOR = 1500; // 1.5 km — apenas perceptible para que cells de valor casi cero igual existan
+  const MIN_FLOOR = 3000; // 3 km — baseline mínimo para que el "océano" tenga un piso continuo
   const features = fc.features.map((f, i) => {
-    const vRaw = rawValues[i];
-    const vSmooth = smoothedValues[i];
-    // pow 0.55 — empuja medios al rango visible sin aplanar el peak
-    const linear = rawMax > 0 ? vRaw / rawMax : 0;
-    const visualH = Math.pow(linear, 0.55);
-    const intensity = percentileOf(vSmooth);
+    const vH = heightValues[i];
+    const vC = colorValues[i];
+    // pow 0.65 — compresión suave hacia arriba para look "wave"
+    const linear = heightMax > 0 ? vH / heightMax : 0;
+    const visualH = Math.pow(linear, 0.65);
+    const intensity = percentileOf(vC);
     const p = f.properties as HexProps;
     return {
       type: "Feature" as const,
@@ -868,9 +872,9 @@ function enrichHexgrid(
       properties: {
         provincia_id: p.provincia_id,
         departamento_id: p.departamento_id ?? null,
-        value: vRaw,
+        value: vH,
         intensity,
-        height: vRaw > 0 ? Math.max(MIN_FLOOR, visualH * MAX_HEIGHT) : 0,
+        height: vH > 0 ? Math.max(MIN_FLOOR, visualH * MAX_HEIGHT) : 0,
       },
     };
   });
@@ -878,15 +882,17 @@ function enrichHexgrid(
 }
 
 function colorInterpolate(): any {
+  // Paleta holográfica: deep teal → cyan neón → mint → amber → rose → magenta
   return [
     "interpolate", ["linear"], ["get", "intensity"],
-    0,    "#0a3d2e",
-    0.18, "#10a37a",
-    0.38, "#34d399",
-    0.55, "#facc15",
-    0.72, "#fb923c",
-    0.88, "#dc2626",
-    1,    "#7c2d12",
+    0,    "#063d3f",
+    0.16, "#0a98a8",
+    0.32, "#22e7e0",
+    0.50, "#7ef0c2",
+    0.66, "#fde047",
+    0.80, "#fb923c",
+    0.92, "#f43f5e",
+    1,    "#c026d3",
   ];
 }
 
