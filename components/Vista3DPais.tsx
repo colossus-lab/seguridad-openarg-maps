@@ -31,7 +31,8 @@ const BASE_STYLE: any = {
 };
 
 // Paleta OpenArg Editorial: navy base + cobalt outlines + sol/vermilion choropleth.
-const CINDER = ["#1A2030", "#3D6FA8", "#74ACDF", "#FFD04A", "#F6B40E", "#C03A18"];
+// Stop 0 ajustado a mid-navy con tinte cobalt para distinguirse del PAPER/DESK navy.
+const CINDER = ["#3D4A66", "#5C7FB0", "#8FBEEA", "#FFD04A", "#F6B40E", "#C03A18"];
 const PAPER = "#0F1620";   // navy paper sutil (Argentina shape)
 const DESK = "#06090F";    // dark navy desk (alrededor del papel)
 const INK = "#74ACDF";     // cobalt celeste para borders
