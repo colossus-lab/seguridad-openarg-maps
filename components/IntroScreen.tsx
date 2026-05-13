@@ -11,7 +11,7 @@ const LINES = [
 
 const SS_KEY = "colossus_intro_seen";
 
-export default function IntroScreen({ progress }: { progress: number }) {
+export default function IntroScreen({ progress, phase }: { progress: number; phase?: string }) {
   const { intro, setIntro } = useDashboard();
 
   // En primera visita de la sesión: mostrar intro. Si ya se vió: skip.
@@ -110,12 +110,12 @@ export default function IntroScreen({ progress }: { progress: number }) {
         {/* Barra de progreso */}
         <div className="mt-10 w-full max-w-sm">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-ink-3">
-            <span>Cargando datos SNIC</span>
-            <span className="num mono">{Math.round(progress * 100)}%</span>
+            <span className="truncate pr-3">{phase ?? "Cargando datos SNIC"}</span>
+            <span className="num mono shrink-0">{Math.round(progress * 100)}%</span>
           </div>
           <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-line-subtle">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400 transition-[width] duration-500 ease-out"
+              className="h-full rounded-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-400 transition-[width] duration-200 ease-out"
               style={{ width: `${progress * 100}%` }}
             />
           </div>

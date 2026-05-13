@@ -27,7 +27,11 @@ const BASE_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-sty
 
 type HexProps = { provincia_id: string; departamento_id: string | null; n?: number[] };
 
-export default function Vista3DPais() {
+type Vista3DPaisProps = {
+  onMapReady?: () => void;
+};
+
+export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   const {
     dataset, nivel, provinciaSel, departamentoSel,
     delitoId, anio, metric,
@@ -100,13 +104,13 @@ export default function Vista3DPais() {
     } else {
       // Volver al país en dos fases (zoom-in→reset)
       map.easeTo({
-        zoom: map.getZoom() + 0.4, pitch: viewMode === "3d" ? 70 : 0, bearing: 12, duration: 320,
+        zoom: map.getZoom() + 0.4, pitch: viewMode === "3d" ? 72 : 0, bearing: 12, duration: 320,
         easing: (t) => t * t,
       });
       setTimeout(() => {
         map.easeTo({
-          center: [-63.5, -38.5], zoom: 3.85,
-          pitch: viewMode === "3d" ? 52 : 0, bearing: 0, duration: 1400,
+          center: [-63.5, -38.5], zoom: 3.9,
+          pitch: viewMode === "3d" ? 62 : 0, bearing: -6, duration: 1400,
           easing: easeOutQuart,
         });
       }, 320);
@@ -237,9 +241,9 @@ export default function Vista3DPais() {
           initialViewState={{
             longitude: -63.5,
             latitude: -38.5,
-            zoom: 3.7,
-            pitch: 48,
-            bearing: 0,
+            zoom: 3.9,
+            pitch: 62,
+            bearing: -6,
           }}
           mapStyle={BASE_STYLE}
           minZoom={3}
@@ -269,6 +273,16 @@ export default function Vista3DPais() {
               ? (viewMode === "3d" ? "hex-pais-3d" : "hex-pais-2d")
               : (viewMode === "3d" ? "hex-prov-3d" : "hex-prov-2d"),
           ]}
+          onLoad={() => {
+            const m = mapRef.current?.getMap();
+            if (!m || !onMapReady) return;
+            // Esperamos el primer 'idle' (mapa con todos los tiles + extrusiones renderizadas).
+            const once = () => {
+              m.off("idle", once);
+              onMapReady();
+            };
+            m.on("idle", once);
+          }}
           style={{ height: "100%", width: "100%", background: "#050a14" }}
         >
           <NavigationControl position="bottom-left" visualizePitch showCompass showZoom />
@@ -350,11 +364,7 @@ export default function Vista3DPais() {
                     ],
                     "fill-extrusion-base": 0,
                     "fill-extrusion-color": colorInterpolate(),
-                    "fill-extrusion-opacity": [
-                      "case",
-                      ["==", ["get", "provincia_id"], hoverProvId ?? "__none__"], 0.92,
-                      0.78,
-                    ],
+                    "fill-extrusion-opacity": 0.82,
                     "fill-extrusion-vertical-gradient": true,
                   }}
                 />
@@ -797,13 +807,13 @@ function enrichHexgrid(
   smooth = true,
 ): GeoJSON.FeatureCollection {
   // En MapLibre fill-extrusion-height son metros. A escala país (zoom 3-4)
-  // necesitamos columnas grandes para que se noten. Mínimo bumpeado también.
-  const MAX_HEIGHT = 350000;
+  // las columnas se tienen que ver fuerte → MAX_HEIGHT muy alto.
+  const MAX_HEIGHT = 850000;
   const rawValues = fc.features.map((f) => getValue(f.properties as HexProps));
 
-  // Smoothing por vecinos baked en el geojson — DOBLE PASADA para gradiente muy soft.
-  // Cada pasada: 0.45 propio + 0.55 distribuido entre 6 vecinos.
-  let values = rawValues;
+  // Smoothing por vecinos baked: usa SÓLO para color (gradiente soft).
+  // La ALTURA usa los valores raw → peaks por provincia quedan visibles.
+  let smoothedValues = rawValues;
   if (smooth) {
     const blur = (input: number[]) => {
       const out = new Array(input.length);
@@ -822,12 +832,15 @@ function enrichHexgrid(
       }
       return out;
     };
-    values = blur(blur(rawValues));
+    smoothedValues = blur(blur(rawValues));
   }
 
-  let globalMax = 0;
-  for (const v of values) if (v > globalMax) globalMax = v;
-  const positives = values.filter((v) => v > 0).slice().sort((a, b) => a - b);
+  // globalMax para height usa los valores RAW (preserva el peak real).
+  let rawMax = 0;
+  for (const v of rawValues) if (v > rawMax) rawMax = v;
+
+  // Percentile rank para COLOR usa los valores smoothed (soft).
+  const positives = smoothedValues.filter((v) => v > 0).slice().sort((a, b) => a - b);
   const N = positives.length;
   const percentileOf = (v: number): number => {
     if (v <= 0 || N === 0) return 0;
@@ -839,11 +852,15 @@ function enrichHexgrid(
     }
     return lo / N;
   };
+
+  const MIN_FLOOR = 1500; // 1.5 km — apenas perceptible para que cells de valor casi cero igual existan
   const features = fc.features.map((f, i) => {
-    const v = values[i];
-    const linear = globalMax > 0 ? v / globalMax : 0;
-    const visualH = Math.pow(linear, 0.4);
-    const intensity = percentileOf(v);
+    const vRaw = rawValues[i];
+    const vSmooth = smoothedValues[i];
+    // pow 0.55 — empuja medios al rango visible sin aplanar el peak
+    const linear = rawMax > 0 ? vRaw / rawMax : 0;
+    const visualH = Math.pow(linear, 0.55);
+    const intensity = percentileOf(vSmooth);
     const p = f.properties as HexProps;
     return {
       type: "Feature" as const,
@@ -851,11 +868,9 @@ function enrichHexgrid(
       properties: {
         provincia_id: p.provincia_id,
         departamento_id: p.departamento_id ?? null,
-        value: v,
+        value: vRaw,
         intensity,
-        // Mínimo visible aún para cells de bajo valor, para que ninguna provincia
-        // quede aplanada y se pierda en el fondo oscuro.
-        height: v > 0 ? Math.max(MAX_HEIGHT * 0.08, visualH * MAX_HEIGHT) : 0,
+        height: vRaw > 0 ? Math.max(MIN_FLOOR, visualH * MAX_HEIGHT) : 0,
       },
     };
   });
