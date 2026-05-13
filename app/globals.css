@@ -60,23 +60,11 @@ h1, h2, h3, h4 { letter-spacing: -0.022em; font-weight: 600; }
   background-size: 32px 32px;
 }
 
-/* Texturas premium para el mapa */
-.map-grain::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  mix-blend-mode: overlay;
-  opacity: 0.55;
-}
-.map-vignette::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(ellipse 80% 90% at 50% 50%, transparent 55%, rgba(0,0,0,0.45) 100%);
-  z-index: 2;
+/* Headline editorial — serif tightly tracked, para títulos del mapa */
+.headline {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  letter-spacing: -0.012em;
 }
 
 input[type="range"] {
@@ -123,12 +111,19 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .maplibregl-ctrl-attrib {
-  background: rgba(10,18,32,0.6) !important;
-  color: rgba(255,255,255,0.55) !important;
+  background: rgba(14,16,20,0.7) !important;
+  color: rgba(255,255,255,0.5) !important;
   font-size: 9.5px !important;
   backdrop-filter: blur(6px);
 }
 .maplibregl-ctrl-attrib a { color: rgba(255,255,255,0.75) !important; }
+.maplibregl-ctrl-group {
+  background: rgba(14,16,20,0.7) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+}
+.maplibregl-ctrl-group button {
+  filter: invert(1) hue-rotate(180deg);
+}
 
 /* Tarjetas glass premium para overlay del mapa */
 .glass-card {

@@ -25,6 +25,16 @@ export default {
           DEFAULT: "#03030326",
           strong: "#0303033d",
         },
+        // Paleta Cinder — editorial sequential
+        cinder: {
+          0: "#1a1d24",
+          1: "#3a2a3f",
+          2: "#6e2a4a",
+          3: "#b03a48",
+          4: "#e8743a",
+          5: "#f4c95d",
+        },
+        // Mantenemos emerald minimal (intro, dots) pero la rampa principal es Cinder
         emerald: {
           400: "#00d294",
           500: "#00bb7f",
@@ -39,6 +49,7 @@ export default {
       fontFamily: {
         sans: ["var(--font-sans)"],
         mono: ["var(--font-mono)"],
+        serif: ["var(--font-serif)"],
       },
       borderRadius: {
         DEFAULT: "0.375rem",

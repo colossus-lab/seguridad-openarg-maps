@@ -20,19 +20,19 @@ export async function loadPaisGeojson(): Promise<GeoJSON.FeatureCollection> {
   return fc;
 }
 
-export async function loadHexgridPais(
+export async function loadDepartamentosAll(
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<GeoJSON.FeatureCollection> {
-  if (geomCache.has("hex-pais")) {
+  if (geomCache.has("deps-all")) {
     onProgress?.(1, 1);
-    return geomCache.get("hex-pais")!;
+    return geomCache.get("deps-all")!;
   }
-  const res = await fetch("/data/hexgrid-pais.geojson");
-  if (!res.ok) throw new Error(`No pude cargar hexgrid-pais: ${res.status}`);
+  const res = await fetch("/data/departamentos.geojson");
+  if (!res.ok) throw new Error(`No pude cargar departamentos.geojson: ${res.status}`);
   const total = Number(res.headers.get("content-length")) || 0;
   if (!res.body || !onProgress || total === 0) {
     const fc: GeoJSON.FeatureCollection = await res.json();
-    geomCache.set("hex-pais", fc);
+    geomCache.set("deps-all", fc);
     return fc;
   }
   const reader = res.body.getReader();
@@ -45,32 +45,10 @@ export async function loadHexgridPais(
     loaded += value.byteLength;
     onProgress(loaded, total);
   }
-  // Concatenar chunks en un solo Uint8Array y decodificar como UTF-8.
   const buf = new Uint8Array(loaded);
   let offset = 0;
   for (const c of chunks) { buf.set(c, offset); offset += c.byteLength; }
-  const text = new TextDecoder("utf-8").decode(buf);
-  const fc: GeoJSON.FeatureCollection = JSON.parse(text);
-  geomCache.set("hex-pais", fc);
-  return fc;
-}
-
-export async function loadDepartamentos(provinciaId: string): Promise<GeoJSON.FeatureCollection> {
-  const key = `deps-${provinciaId}`;
-  if (geomCache.has(key)) return geomCache.get(key)!;
-  const res = await fetch(`/data/departamentos/${provinciaId}.geojson`);
-  if (!res.ok) throw new Error(`No pude cargar departamentos ${provinciaId}: ${res.status}`);
-  const fc: GeoJSON.FeatureCollection = await res.json();
-  geomCache.set(key, fc);
-  return fc;
-}
-
-export async function loadHexgridProvincia(provinciaId: string): Promise<GeoJSON.FeatureCollection> {
-  const key = `hex-${provinciaId}`;
-  if (geomCache.has(key)) return geomCache.get(key)!;
-  const res = await fetch(`/data/hexgrid/${provinciaId}.geojson`);
-  if (!res.ok) throw new Error(`No pude cargar hexgrid ${provinciaId}: ${res.status}`);
-  const fc: GeoJSON.FeatureCollection = await res.json();
-  geomCache.set(key, fc);
+  const fc: GeoJSON.FeatureCollection = JSON.parse(new TextDecoder("utf-8").decode(buf));
+  geomCache.set("deps-all", fc);
   return fc;
 }
