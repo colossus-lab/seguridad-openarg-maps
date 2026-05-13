@@ -183,13 +183,15 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     const positives = values.filter((v) => v > 0).slice().sort((a, b) => a - b);
     const N = positives.length;
     const pct = (v: number) => {
-      if (v <= 0 || N === 0) return 0;
+      if (v <= 0 || N === 0) return 0;     // sólo value=0 → intensity 0 (stop 0)
       let lo = 0, hi = N;
       while (lo < hi) {
         const m = (lo + hi) >>> 1;
         if (positives[m] < v) lo = m + 1; else hi = m;
       }
-      return lo / N;
+      // Mapear positivos a [0.08, 1.0]; reservar 0 sólo para value=0. Antes
+      // el menor positivo daba lo=0 → 0/N = 0 → mismo color que cero.
+      return 0.08 + ((lo + 1) / N) * 0.92;
     };
     const features = depsGeo.features.map((f, i) => ({
       type: "Feature" as const,
