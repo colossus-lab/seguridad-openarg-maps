@@ -22,10 +22,12 @@ const sourceSerif = Source_Serif_4({
   display: "swap",
 });
 
-// URL canónica del sitio. Vercel inyecta VERCEL_URL en producción; en local cae a localhost.
+// URL canónica del sitio en producción. Hardcodeada para que los crawlers de
+// redes sociales siempre resuelvan al dominio definitivo (no a la URL temporal
+// de Vercel). Override posible vía NEXT_PUBLIC_SITE_URL en entornos de preview.
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://seguridad.openarg.org");
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

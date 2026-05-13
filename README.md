@@ -3,6 +3,8 @@
 **Observatorio editorial interactivo sobre estadísticas criminales SNIC 2000–2024.**
 Una producción de [Colossus Lab](https://www.colossuslab.org).
 
+🔗 **[seguridad.openarg.org](https://seguridad.openarg.org)** — Plataforma en vivo
+
 [![Datos SNIC](https://img.shields.io/badge/Datos-SNIC%202000--2024-2a1410?style=flat-square)](https://www.argentina.gob.ar/seguridad/estadisticascriminales)
 [![Geometrías IGN](https://img.shields.io/badge/Geometr%C3%ADas-IGN-6e2a1a?style=flat-square)](https://www.ign.gob.ar)
 [![Colossus Lab](https://img.shields.io/badge/Producci%C3%B3n-Colossus%20Lab-984a3a?style=flat-square)](https://www.colossuslab.org)
@@ -178,9 +180,11 @@ Los datos visualizados son de dominio público bajo licencia abierta del Estado 
 
 ---
 
-## Deploy
+## Producción
 
-Para desplegar tu propia copia en Vercel:
+Plataforma activa: **[seguridad.openarg.org](https://seguridad.openarg.org)**
+
+Para desplegar tu propia copia:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcolossus-lab%2Fseguridad-openarg-maps)
 
