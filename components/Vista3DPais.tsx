@@ -44,6 +44,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   });
   const mapRef = useRef<MapRef | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const orbitRafRef = useRef<number | null>(null);
   const nivel: "pais" | "provincia" = provinciaSel ? "provincia" : "pais";
 
   useEffect(() => {
@@ -64,33 +65,84 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     return () => { obs.disconnect(); clearInterval(iv); clearTimeout(stop); };
   }, [depsGeo]);
 
-  // Camera transitions: provincia → zoom + tilt, depto → zoom más cerca, reset → país plano.
+  // Camera transitions:
+  //   depto:     easeTo centroide + pitch 42°
+  //   provincia: fitBounds + orbit 360° cinematográfico
+  //   reset:     vuelta a Argentina plana
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !paisGeo || !depsGeo) return;
-    const easing = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    // Cancelar cualquier orbit en curso si cambia la selección
+    if (orbitRafRef.current !== null) {
+      cancelAnimationFrame(orbitRafRef.current);
+      orbitRafRef.current = null;
+    }
+
+    const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+    const easeInOut = (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
     if (departamentoSel) {
       const f = depsGeo.features.find((x) => (x.properties as any).departamento_id === departamentoSel);
       const c = (f?.properties as any)?.centroid as [number, number] | undefined;
       if (c) {
-        map.easeTo({ center: c, zoom: 7.2, pitch: 42, bearing: 0, duration: 1200, easing });
+        map.easeTo({
+          center: c, zoom: 7.2, pitch: 42, bearing: 0,
+          padding: { top: 0, right: 380, bottom: 0, left: 340 } as any,
+          duration: 1200, easing: easeOut,
+        });
       }
     } else if (provinciaSel) {
       const prov = paisGeo.features.find((x) => (x.properties as any).provincia_id === provinciaSel);
-      if (prov) {
-        const bb = bboxOf(prov);
-        map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], {
-          padding: { top: 120, right: 360, bottom: 220, left: 120 },
-          pitch: 48, bearing: 0, duration: 1400, easing, maxZoom: 7.5,
-        });
-      }
+      if (!prov) return;
+      const bb = bboxOf(prov);
+      const center: [number, number] = [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2];
+      // Fase 1: fitBounds con padding asimétrico (left para sidebar 320, right para HUD 360)
+      map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], {
+        padding: { top: 100, right: 380, bottom: 100, left: 340 },
+        pitch: 60, bearing: 0, duration: 700, easing: easeOut, maxZoom: 7.5,
+      });
+      // Fase 2: orbit 360° usando rAF sobre setBearing
+      const orbitStartDelay = 700;
+      const orbitDuration = 2400;
+      const finalPitch = 52;
+      const finalBearing = 0;
+      const t0Schedule = setTimeout(() => {
+        const startTime = performance.now();
+        const startPitch = 60;
+        const startCenter = center;
+        const step = (now: number) => {
+          const t = Math.min(1, (now - startTime) / orbitDuration);
+          const e = easeInOut(t);
+          // Re-anchorar el centro por si el fitBounds desplazó un poco
+          map.setCenter(startCenter);
+          map.setBearing(e * 360); // full revolution
+          map.setPitch(startPitch + (finalPitch - startPitch) * e);
+          if (t < 1) {
+            orbitRafRef.current = requestAnimationFrame(step);
+          } else {
+            map.setBearing(finalBearing);
+            map.setPitch(finalPitch);
+            orbitRafRef.current = null;
+          }
+        };
+        orbitRafRef.current = requestAnimationFrame(step);
+      }, orbitStartDelay);
+      // cleanup function captura t0Schedule
+      return () => { clearTimeout(t0Schedule); };
     } else {
       map.easeTo({
         center: [-63.5, -38.5], zoom: 3.7, pitch: 0, bearing: 0,
-        duration: 1200, easing,
+        padding: { top: 0, right: 0, bottom: 0, left: 340 } as any,
+        duration: 1200, easing: easeOut,
       });
     }
   }, [provinciaSel, departamentoSel, paisGeo, depsGeo]);
+
+  // Cleanup al desmontar
+  useEffect(() => () => {
+    if (orbitRafRef.current !== null) cancelAnimationFrame(orbitRafRef.current);
+  }, []);
 
   // Datos.
   const ai = useMemo(() => (dataset ? dataset.anios.indexOf(anio) : -1), [dataset, anio]);
@@ -281,7 +333,14 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         interactiveLayerIds={["deps-fill"]}
         onLoad={() => {
           const m = mapRef.current?.getMap();
-          if (!m || !onMapReady) return;
+          if (!m) return;
+          // Aplicar padding del sidebar (320px) al cargar para que el mapa quede centrado en el viewport útil
+          m.easeTo({
+            center: [-63.5, -38.5], zoom: 3.7, pitch: 0, bearing: 0,
+            padding: { top: 0, right: 0, bottom: 0, left: 340 } as any,
+            duration: 0,
+          });
+          if (!onMapReady) return;
           const once = () => { m.off("idle", once); onMapReady(); };
           m.on("idle", once);
         }}
@@ -432,87 +491,182 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         depAnchor={departamentoSel ? depAnchorPx : null}
       />
 
-      {/* === Header === */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30">
-        <div className="pointer-events-auto mx-auto flex max-w-[1480px] items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3 rounded-full border border-white/10 bg-black/55 px-4 py-1.5 backdrop-blur-md">
-            <span className="relative inline-flex h-2 w-2">
-              <span className="absolute inset-0 rounded-full bg-amber-300 halo-expand" />
-              <span className="absolute inset-0 rounded-full bg-amber-300" />
-            </span>
-            <span className="text-[10.5px] font-semibold uppercase tracking-[0.24em] text-white/85">
-              Colossus Lab
-            </span>
-            <span className="h-3 w-px bg-white/15" />
-            <span className="text-[10.5px] uppercase tracking-[0.24em] text-white/55">
-              Observatorio · Seguridad
-            </span>
-          </div>
-          <nav className="flex items-center gap-2">
-            <a href="https://www.colossuslab.org" target="_blank" rel="noreferrer" className="rounded-full border border-white/10 bg-black/55 px-3.5 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/65 backdrop-blur-md transition hover:text-white">
-              colossuslab.org
-            </a>
-            <a href="https://www.argentina.gob.ar/seguridad/estadisticascriminales" target="_blank" rel="noreferrer" className="rounded-full border border-white/10 bg-black/55 px-3.5 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/65 backdrop-blur-md transition hover:text-white">
-              Fuente SNIC ↗
-            </a>
-          </nav>
-        </div>
+      {/* === Header nav (sólo right side; el chip Colossus está en la sidebar) === */}
+      <div className="pointer-events-none absolute right-0 top-0 z-40">
+        <nav className="pointer-events-auto flex items-center gap-2 px-6 py-4">
+          <a href="https://www.colossuslab.org" target="_blank" rel="noreferrer" className="rounded-full border border-white/10 bg-black/55 px-3.5 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/65 backdrop-blur-md transition hover:text-white">
+            colossuslab.org
+          </a>
+          <a href="https://www.argentina.gob.ar/seguridad/estadisticascriminales" target="_blank" rel="noreferrer" className="rounded-full border border-white/10 bg-black/55 px-3.5 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/65 backdrop-blur-md transition hover:text-white">
+            Fuente SNIC ↗
+          </a>
+        </nav>
       </div>
 
-      {/* === Headline editorial (sólo a nivel país) === */}
-      {nivel === "pais" && (
-        <div className="pointer-events-none absolute left-8 top-[88px] z-20 max-w-[480px] anim-fade-up">
-          <div className="text-[10.5px] uppercase tracking-[0.24em] text-amber-300/80">
-            Open Arg · SNIC · {dataset.anios[0]}–{dataset.anios[dataset.anios.length - 1]}
-          </div>
-          <h1 className="mt-3 headline text-[44px] leading-[1.02] tracking-[-0.012em] text-white md:text-[52px]">
-            Mapa de inseguridad
-            <span className="block text-white/55">República Argentina</span>
-          </h1>
-          <p className="mt-3 max-w-md text-[13px] leading-snug text-white/55">
-            {dataset.provincias.length} provincias · {dataset.departamentos.length} departamentos ·{" "}
-            {dataset.delitos.length} categorías SNIC · serie {dataset.anios.length} años.
-          </p>
-        </div>
-      )}
-
-      {/* === Breadcrumb (en niveles drill) === */}
-      {nivel === "provincia" && (
-        <div className="pointer-events-auto absolute left-8 top-[88px] z-20 flex items-center gap-2 rounded-full border border-white/10 bg-black/55 px-4 py-2 text-[12px] backdrop-blur-md anim-fade-up">
-          <button onClick={() => reset()} className="text-white/55 transition hover:text-white">
-            ← Argentina
-          </button>
-          <span className="text-white/25">›</span>
-          <span className="headline text-white">
-            {dataset.provincias.find((p) => p.id === provinciaSel)?.nombre}
+      {/* === Sidebar izquierda anclada (chip + headline + filtros + stats + legend) === */}
+      <aside className="pointer-events-auto absolute left-0 top-0 z-30 flex h-full w-[320px] flex-col gap-5 border-r border-white/8 bg-black/65 px-5 pb-6 pt-5 backdrop-blur-md anim-fade-up">
+        {/* Chip Colossus institucional */}
+        <div className="inline-flex items-center gap-2.5 self-start rounded-full border border-white/10 bg-black/50 px-3 py-1.5">
+          <span className="relative inline-flex h-2 w-2">
+            <span className="absolute inset-0 rounded-full bg-amber-300 halo-expand" />
+            <span className="absolute inset-0 rounded-full bg-amber-300" />
           </span>
-          {departamentoSel && (
-            <>
-              <span className="text-white/25">›</span>
-              <span className="headline text-white/85">
-                {dataset.departamentos.find((d) => d.id === departamentoSel)?.nombre}
-              </span>
-            </>
-          )}
+          <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/85">
+            Colossus Lab
+          </span>
+          <span className="h-3 w-px bg-white/15" />
+          <span className="text-[10px] uppercase tracking-[0.22em] text-white/55">
+            Observatorio
+          </span>
         </div>
-      )}
 
-      {/* === Legend (top-right) === */}
-      <div className="pointer-events-none absolute right-8 top-[88px] z-20 w-[260px] rounded-xl border border-white/10 bg-black/65 px-4 py-3.5 backdrop-blur-md anim-fade-up">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300/85">
-          {delitoNombre}
+        {/* Eyebrow */}
+        <div className="text-[10px] uppercase tracking-[0.22em] text-amber-300/85">
+          Open Arg · SNIC · {dataset.anios[0]}–{dataset.anios[dataset.anios.length - 1]}
         </div>
-        <div className="mt-1 text-[11px] text-white/55 mono num">
-          {anio} · {metric === "tasa" ? "tasa /100k hab." : "hechos absolutos"}
-        </div>
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
-          style={{ background: `linear-gradient(90deg, ${CINDER.join(", ")})` }} />
-        <div className="mt-1.5 flex justify-between text-[9.5px] uppercase tracking-[0.16em] text-white/40 num">
-          <span>min</span><span>mediana</span><span>max</span>
-        </div>
-      </div>
 
-      {/* === HUD provincia con leader line === */}
+        {/* Headline o breadcrumb */}
+        {nivel === "pais" ? (
+          <div>
+            <h1 className="headline text-[30px] leading-[1.05] tracking-[-0.012em] text-white">
+              Mapa de inseguridad
+              <span className="block text-white/55">República Argentina</span>
+            </h1>
+            <p className="mt-3 text-[11.5px] leading-snug text-white/55">
+              {dataset.provincias.length} provincias · {dataset.departamentos.length} departamentos · {dataset.delitos.length} categorías SNIC.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-baseline gap-1.5 text-[12px]">
+            <button onClick={() => reset()} className="text-white/55 transition hover:text-white">
+              ← Argentina
+            </button>
+            <span className="text-white/25">›</span>
+            <span className="headline text-[15px] text-white">
+              {dataset.provincias.find((p) => p.id === provinciaSel)?.nombre}
+            </span>
+            {departamentoSel && (
+              <>
+                <span className="text-white/25">›</span>
+                <span className="headline text-[13px] text-white/85">
+                  {dataset.departamentos.find((d) => d.id === departamentoSel)?.nombre}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="h-px bg-white/8" />
+
+        {/* Filtros */}
+        <div className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-white/55">Tipo de delito</span>
+            <select
+              value={delitoId}
+              onChange={(e) => setDelito(e.target.value)}
+              className="rounded-md border border-white/10 bg-black/40 px-2.5 py-2 text-[12.5px] text-white outline-none focus:border-amber-300/60 focus:ring-2 focus:ring-amber-300/20"
+            >
+              <option value="all">— Todos los delitos (suma SNIC) —</option>
+              {dataset.delitos.map((d) => (
+                <option key={d.id} value={d.id}>{d.nombre}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-white/55">Métrica</span>
+            <div className="inline-flex overflow-hidden rounded-md border border-white/10 bg-black/40">
+              {(["tasa", "hechos"] as const).map((m, i) => (
+                <button
+                  key={m}
+                  onClick={() => setMetric(m)}
+                  className={["press-feedback flex-1 px-2 py-2 text-[11.5px] font-medium transition",
+                    i === 0 ? "border-r border-white/10" : "",
+                    metric === m ? "bg-amber-300 text-black" : "text-white/65 hover:text-white"].join(" ")}
+                >
+                  {m === "tasa" ? "Tasa /100k" : "Hechos"}
+                </button>
+              ))}
+            </div>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="flex items-baseline justify-between">
+              <span className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-white/55">Año</span>
+              <span className="mono num text-[12px] font-semibold text-white">{anio}</span>
+            </span>
+            <div className="relative pt-6">
+              <div className="slider-tooltip" style={{
+                left: `${((anio - dataset.anios[0]) / (dataset.anios[dataset.anios.length - 1] - dataset.anios[0])) * 100}%`,
+              }}>{anio}</div>
+              <input
+                type="range"
+                min={dataset.anios[0]} max={dataset.anios[dataset.anios.length - 1]} step={1}
+                value={anio} onChange={(e) => setAnio(Number(e.target.value))}
+                className="w-full"
+              />
+              <div className="mt-0.5 flex justify-between text-[9.5px] text-white/35 mono num">
+                <span>{dataset.anios[0]}</span>
+                <span>{dataset.anios[dataset.anios.length - 1]}</span>
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div className="h-px bg-white/8" />
+
+        {/* Stats compactos */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-amber-300/85">Categoría · {anio}</div>
+            <div className="mt-0.5 text-[18px] font-semibold leading-none tracking-tight text-white num">
+              {totalSel.toLocaleString("es-AR")}
+            </div>
+            <div className="mt-0.5 text-[9.5px] text-white/45">hechos</div>
+          </div>
+          <div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/45">Total agregado</div>
+            <div className="mt-0.5 text-[18px] font-semibold leading-none tracking-tight text-white/75 num">
+              {totalAll.toLocaleString("es-AR")}
+            </div>
+            <div className="mt-0.5 text-[9.5px] text-white/45">SNIC total</div>
+          </div>
+        </div>
+
+        <div className="h-px bg-white/8" />
+
+        {/* Legend */}
+        <div>
+          <div className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-amber-300/85">
+            {delitoNombre}
+          </div>
+          <div className="mt-1 text-[10.5px] text-white/55 mono num">
+            {anio} · {metric === "tasa" ? "tasa /100k hab." : "hechos absolutos"}
+          </div>
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full"
+            style={{ background: `linear-gradient(90deg, ${CINDER.join(", ")})` }} />
+          <div className="mt-1.5 flex justify-between text-[9px] uppercase tracking-[0.16em] text-white/40 num">
+            <span>min</span><span>mediana</span><span>max</span>
+          </div>
+          <div className="mt-2 text-[10px] leading-snug text-white/45">
+            Color por percentil · escala perceptual robusta a outliers.
+          </div>
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Footer instructivo */}
+        <div className="text-[10px] leading-snug text-white/40">
+          {nivel === "pais"
+            ? "Click una provincia para drill-down."
+            : departamentoSel
+              ? "ESC vuelve a la provincia. ✕ cierra detalle."
+              : "Click un departamento · ESC para volver."}
+        </div>
+      </aside>
+
+      {/* === HUD provincia (right) con leader line === */}
       {nivel === "provincia" && !departamentoSel && provinciaSel && (
         <ProvinciaHUD
           dataset={dataset}
@@ -525,7 +679,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         />
       )}
 
-      {/* === HUD departamento con leader line === */}
+      {/* === HUD departamento (right) con leader line === */}
       {departamentoSel && (
         <DepartamentoHUD
           dataset={dataset}
@@ -537,89 +691,6 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           onClose={() => selectDepartamento(null)}
         />
       )}
-
-      {/* === Bottom filter panel === */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 pb-6">
-        <div className="pointer-events-auto mx-auto max-w-[1080px] px-6">
-          <div className="rounded-2xl border border-white/10 bg-black/65 px-5 py-4 backdrop-blur-md anim-fade-up">
-            <div className="mb-3 flex items-baseline justify-between gap-3">
-              <div className="flex items-baseline gap-5">
-                <div>
-                  <div className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-amber-300/85">Categoría · {anio}</div>
-                  <div className="mt-0.5 text-[20px] font-semibold leading-none tracking-tight text-white num">
-                    {totalSel.toLocaleString("es-AR")}
-                  </div>
-                </div>
-                <div className="h-9 w-px bg-white/15" />
-                <div>
-                  <div className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-white/45">Total agregado</div>
-                  <div className="mt-0.5 text-[14px] text-white/75 num">
-                    {totalAll.toLocaleString("es-AR")}<span className="text-white/45"> hechos</span>
-                  </div>
-                </div>
-              </div>
-              <div className="text-[10px] text-white/45">
-                {nivel === "pais" ? "Click una provincia para hacer drill-down" : departamentoSel ? "ESC para volver a la provincia" : "Click un departamento · ESC para volver"}
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_auto_minmax(0,1fr)] md:items-end">
-              <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-white/55">Tipo de delito</span>
-                <select
-                  value={delitoId}
-                  onChange={(e) => setDelito(e.target.value)}
-                  className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-[13px] text-white outline-none focus:border-amber-300/60 focus:ring-2 focus:ring-amber-300/20"
-                >
-                  <option value="all">— Todos los delitos (suma SNIC) —</option>
-                  {dataset.delitos.map((d) => (
-                    <option key={d.id} value={d.id}>{d.nombre}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-1.5">
-                <span className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-white/55">Métrica</span>
-                <div className="inline-flex overflow-hidden rounded-md border border-white/10 bg-black/30">
-                  {(["tasa", "hechos"] as const).map((m, i) => (
-                    <button
-                      key={m}
-                      onClick={() => setMetric(m)}
-                      className={["press-feedback px-4 py-2 text-[12px] font-medium transition",
-                        i === 0 ? "border-r border-white/10" : "",
-                        metric === m ? "bg-amber-300 text-black" : "text-white/65 hover:text-white"].join(" ")}
-                    >
-                      {m === "tasa" ? "Tasa /100k" : "Hechos"}
-                    </button>
-                  ))}
-                </div>
-              </label>
-
-              <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="flex items-baseline justify-between">
-                  <span className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-white/55">Año</span>
-                  <span className="mono num text-[12px] font-semibold text-white">{anio}</span>
-                </span>
-                <div className="relative pt-6">
-                  <div className="slider-tooltip" style={{
-                    left: `${((anio - dataset.anios[0]) / (dataset.anios[dataset.anios.length - 1] - dataset.anios[0])) * 100}%`,
-                  }}>{anio}</div>
-                  <input
-                    type="range"
-                    min={dataset.anios[0]} max={dataset.anios[dataset.anios.length - 1]} step={1}
-                    value={anio} onChange={(e) => setAnio(Number(e.target.value))}
-                    className="w-full"
-                  />
-                  <div className="mt-0.5 flex justify-between text-[9.5px] text-white/35 mono num">
-                    <span>{dataset.anios[0]}</span>
-                    <span>{dataset.anios[dataset.anios.length - 1]}</span>
-                  </div>
-                </div>
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -635,9 +706,9 @@ function LeaderLines({
   if (!provAnchor && !depAnchor) return null;
   const w = typeof window !== "undefined" ? window.innerWidth : 1920;
   const h = typeof window !== "undefined" ? window.innerHeight : 1080;
-  // HUD ancla del lado derecho. Cards posicionadas en right:32px top:160px aprox.
-  const hudX = w - 380;  // edge izquierdo del HUD (ancho 360)
-  const hudY = 230;      // y central del HUD aprox
+  // HUD anclado a la derecha: right:32px width:360px → edge izquierdo en w - 392
+  const hudX = w - 392;
+  const hudY = 220; // y central del HUD aprox (top-[160px] + ~60px)
   return (
     <svg
       className="pointer-events-none absolute inset-0 z-10"
