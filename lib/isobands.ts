@@ -73,18 +73,38 @@ function percentiles(values: number[], breaks: number[]): number[] {
 }
 
 /**
+ * Une las features de un FeatureCollection en un solo Feature.
+ * Operación costosa con 24 polígonos provinciales — debe correrse UNA sola vez
+ * (memoizado en el componente) y reusarse en cada compute de isobands.
+ */
+export function unionFeatureCollection(fc: GeoJSON.FeatureCollection): GeoJSON.Feature | null {
+  if (!fc || fc.features.length === 0) return null;
+  let combined: any = null;
+  for (const f of fc.features) {
+    if (!combined) combined = f;
+    else {
+      try { combined = turf.union(combined as any, f as any); }
+      catch { /* mantener anterior */ }
+    }
+  }
+  return combined;
+}
+
+/**
  * Computa isobandas para una distribución de valores por punto (centroides).
- * Si se pasa `clipTo`, las isobandas se intersectan con ese polígono (típicamente
- * el contorno de Argentina) para que el halo no se desborde a océanos o vecinos.
+ * Si se pasa `clipTo` (un Feature pre-unionado), las isobandas se intersectan con
+ * ese polígono para que el halo no se desborde a océanos o vecinos.
  * Retorna FeatureCollection con 6 polígonos etiquetados con `intensity` 0..1.
  */
 export function computeIsobands(
   points: Point[],
   bbox: [number, number, number, number],
-  clipTo?: GeoJSON.FeatureCollection,
+  clipTo?: GeoJSON.Feature | null,
 ): GeoJSON.FeatureCollection {
   if (points.length === 0) return { type: "FeatureCollection", features: [] };
-  const grid = idwGrid(points, bbox, 80, 60, 8, 2);
+  // Grid 50×40 = 2000 pts × 8 vecinos (vs anterior 80×60 = 4800 pts).
+  // ~58% menos compute, calidad visual del halo prácticamente igual a escala país.
+  const grid = idwGrid(points, bbox, 50, 40, 8, 2);
   const gridFC: GeoJSON.FeatureCollection<GeoJSON.Point, { v: number }> = {
     type: "FeatureCollection",
     features: grid.features,
@@ -100,23 +120,12 @@ export function computeIsobands(
     f.properties = { intensity: N > 1 ? i / (N - 1) : 0 };
   });
 
-  if (!clipTo || clipTo.features.length === 0) return isobands as GeoJSON.FeatureCollection;
-
-  // Construir un solo Feature unión de todas las provincias para clipear (más eficiente).
-  let combined: any = null;
-  for (const f of clipTo.features) {
-    if (!combined) combined = f;
-    else {
-      try { combined = turf.union(combined as any, f as any); }
-      catch { /* mantener anterior */ }
-    }
-  }
-  if (!combined) return isobands as GeoJSON.FeatureCollection;
+  if (!clipTo) return isobands as GeoJSON.FeatureCollection;
 
   const clipped: any[] = [];
   for (const band of isobands.features) {
     try {
-      const inter = turf.intersect(band as any, combined as any);
+      const inter = turf.intersect(band as any, clipTo as any);
       if (inter) { inter.properties = band.properties; clipped.push(inter); }
     } catch { /* skip */ }
   }

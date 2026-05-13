@@ -15,7 +15,7 @@ import {
   serieProvincia, serieDepartamento, evolucion5Anios,
 } from "@/lib/analytics";
 import { loadPaisGeojson, loadDepartamentosAll } from "@/lib/data";
-import { computeIsobands } from "@/lib/isobands";
+import { computeIsobands, unionFeatureCollection } from "@/lib/isobands";
 import type { Dataset, Metric } from "@/lib/types";
 
 // Estilo minimal: fondo desk plano, sin tiles externos. Argentina se dibuja
@@ -199,7 +199,15 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     return { type: "FeatureCollection", features };
   }, [depsGeo, valoresDep]);
 
-  // Isobands clipped to Argentina.
+  // Polígono unión de las 24 provincias — se computa UNA sola vez al cargar paisGeo.
+  // turf.union sobre 24 features cuesta ~150-200ms, antes corría en cada compute de
+  // isobands → INP fix: memoizado fuera del compute.
+  const argUnion = useMemo(() => {
+    if (!paisGeo) return null;
+    return unionFeatureCollection(paisGeo);
+  }, [paisGeo]);
+
+  // Isobands clipped to Argentina (usa argUnion ya memoizado).
   const isobandsFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
     if (!depsGeo || valoresDep.size === 0) return null;
     const points = depsGeo.features
@@ -212,9 +220,9 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
       })
       .filter((x): x is { lon: number; lat: number; v: number } => x !== null);
     try {
-      return computeIsobands(points, ARG_BBOX, paisGeo ?? undefined);
+      return computeIsobands(points, ARG_BBOX, argUnion);
     } catch (e) { console.error("isobands error", e); return null; }
-  }, [depsGeo, valoresDep, paisGeo]);
+  }, [depsGeo, valoresDep, argUnion]);
 
   // Hover extrusion: FeatureCollection con sólo el depto bajo el cursor.
   // Memoizado para no crear un objeto nuevo en cada paint (cada mousemove dispararía
