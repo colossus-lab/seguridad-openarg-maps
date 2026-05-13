@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "data:build": "node scripts/build-data.mjs && node scripts/build-geojson-pais.mjs && node scripts/build-geojson-departamentos.mjs && node scripts/build-geojson-departamentos-all.mjs",
+    "data:build": "node scripts/build-data.mjs && node scripts/build-geojson-pais.mjs && node scripts/build-geojson-departamentos.mjs && node scripts/build-geojson-departamentos-all.mjs && node scripts/build-mask.mjs",
     "data:fetch-geom": "node scripts/fetch-geom.mjs"
   },
   "dependencies": {

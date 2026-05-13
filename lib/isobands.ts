@@ -74,35 +74,51 @@ function percentiles(values: number[], breaks: number[]): number[] {
 
 /**
  * Computa isobandas para una distribución de valores por punto (centroides).
- * Retorna FeatureCollection con 6 polígonos (5 quantile breaks) etiquetados con `intensity` 0..1.
+ * Si se pasa `clipTo`, las isobandas se intersectan con ese polígono (típicamente
+ * el contorno de Argentina) para que el halo no se desborde a océanos o vecinos.
+ * Retorna FeatureCollection con 6 polígonos etiquetados con `intensity` 0..1.
  */
 export function computeIsobands(
   points: Point[],
   bbox: [number, number, number, number],
+  clipTo?: GeoJSON.FeatureCollection,
 ): GeoJSON.FeatureCollection {
-  if (points.length === 0) {
-    return { type: "FeatureCollection", features: [] };
-  }
+  if (points.length === 0) return { type: "FeatureCollection", features: [] };
   const grid = idwGrid(points, bbox, 80, 60, 8, 2);
-  // Convertir grid de puntos a FeatureCollection que turf.isobands acepta
   const gridFC: GeoJSON.FeatureCollection<GeoJSON.Point, { v: number }> = {
     type: "FeatureCollection",
     features: grid.features,
   };
-  // Breakpoints por percentil real (más robusto que linear)
   const vals = grid.features.map((f) => f.properties.v);
   const breaks = percentiles(vals, [0.0, 0.18, 0.38, 0.58, 0.78, 0.95]);
-  // Asegurar monotonía estricta
   for (let i = 1; i < breaks.length; i++) {
     if (breaks[i] <= breaks[i - 1]) breaks[i] = breaks[i - 1] + 1e-6;
   }
-  // turf.isobands necesita "breaks" como pares [from, to] o array de N+1 valores
-  // El API en @turf/turf espera un array de strings/numbers; usamos number[].
   const isobands = turf.isobands(gridFC as any, breaks, { zProperty: "v" }) as any;
-  // Etiquetar cada feature con intensity 0..1 (índice del break / N-1)
   const N = isobands.features.length;
   isobands.features.forEach((f: any, i: number) => {
     f.properties = { intensity: N > 1 ? i / (N - 1) : 0 };
   });
-  return isobands as GeoJSON.FeatureCollection;
+
+  if (!clipTo || clipTo.features.length === 0) return isobands as GeoJSON.FeatureCollection;
+
+  // Construir un solo Feature unión de todas las provincias para clipear (más eficiente).
+  let combined: any = null;
+  for (const f of clipTo.features) {
+    if (!combined) combined = f;
+    else {
+      try { combined = turf.union(combined as any, f as any); }
+      catch { /* mantener anterior */ }
+    }
+  }
+  if (!combined) return isobands as GeoJSON.FeatureCollection;
+
+  const clipped: any[] = [];
+  for (const band of isobands.features) {
+    try {
+      const inter = turf.intersect(band as any, combined as any);
+      if (inter) { inter.properties = band.properties; clipped.push(inter); }
+    } catch { /* skip */ }
+  }
+  return { type: "FeatureCollection", features: clipped };
 }

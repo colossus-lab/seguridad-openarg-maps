@@ -20,6 +20,15 @@ export async function loadPaisGeojson(): Promise<GeoJSON.FeatureCollection> {
   return fc;
 }
 
+export async function loadMask(): Promise<GeoJSON.FeatureCollection> {
+  if (geomCache.has("mask")) return geomCache.get("mask")!;
+  const res = await fetch("/data/mask.geojson");
+  if (!res.ok) throw new Error(`No pude cargar mask.geojson: ${res.status}`);
+  const fc: GeoJSON.FeatureCollection = await res.json();
+  geomCache.set("mask", fc);
+  return fc;
+}
+
 export async function loadDepartamentosAll(
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<GeoJSON.FeatureCollection> {

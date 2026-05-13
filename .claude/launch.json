@@ -4,8 +4,8 @@
     {
       "name": "mapa-pais",
       "runtimeExecutable": "echo",
-      "runtimeArgs": ["already-running"],
-      "port": 3000
+      "runtimeArgs": ["already-running-on-3001"],
+      "port": 3001
     }
   ]
 }
