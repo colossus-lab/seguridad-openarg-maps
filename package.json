@@ -11,6 +11,7 @@
     "data:fetch-geom": "node scripts/fetch-geom.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/familjen-grotesk": "^5.2.8",
     "d3-scale": "^4.0.2",
     "d3-scale-chromatic": "^3.1.0",
     "framer-motion": "^12.38.0",

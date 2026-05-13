@@ -67,7 +67,7 @@ export default function IntroScreen({ progress, phase }: { progress: number; pha
     <div className={`fixed inset-0 z-[100] flex items-center justify-center ${hide ? "intro-out" : ""}`}
       style={{
         background:
-          "radial-gradient(1200px 700px at 50% 30%, #f7f1e3 0%, transparent 60%), radial-gradient(900px 500px at 80% 80%, #f0e8d7 0%, transparent 55%), linear-gradient(#fbf8f2, #f4eedf)",
+          "radial-gradient(1200px 700px at 50% 30%, rgba(116,172,223,0.12) 0%, transparent 60%), radial-gradient(900px 500px at 80% 80%, rgba(246,180,14,0.06) 0%, transparent 55%), linear-gradient(var(--color-bg), var(--color-surface-1))",
       }}
     >
       <div className="paper-grid absolute inset-0 opacity-[0.25]" />

@@ -5,6 +5,7 @@ import { useDashboard } from "@/lib/store";
 import { loadDataset, loadPaisGeojson, loadDepartamentosAll } from "@/lib/data";
 import Vista3DPais from "./Vista3DPais";
 import IntroScreen from "./IntroScreen";
+import ThemeToggleEditorial from "./ThemeToggleEditorial";
 
 export default function DashboardShell() {
   const { dataset, setDataset, intro, setIntro } = useDashboard();
@@ -64,6 +65,7 @@ export default function DashboardShell() {
     <>
       {intro !== "done" && <IntroScreen progress={progress} phase={phase} />}
       {dataset && <Vista3DPais onMapReady={onMapReady} />}
+      <ThemeToggleEditorial />
     </>
   );
 }

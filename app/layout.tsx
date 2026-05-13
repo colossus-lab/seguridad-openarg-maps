@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import "@fontsource-variable/familjen-grotesk";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 
@@ -15,16 +16,8 @@ const jbMono = JetBrains_Mono({
   weight: ["400", "500", "600"],
   display: "swap",
 });
-const sourceSerif = Source_Serif_4({
-  subsets: ["latin"],
-  variable: "--font-serif",
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
 
-// URL canónica del sitio en producción. Hardcodeada para que los crawlers de
-// redes sociales siempre resuelvan al dominio definitivo (no a la URL temporal
-// de Vercel). Override posible vía NEXT_PUBLIC_SITE_URL en entornos de preview.
+// URL canónica del sitio en producción.
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
   (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://seguridad.openarg.org");
@@ -61,9 +54,23 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+// Anti-FOUC: aplica data-theme antes del primer paint según localStorage.
+// Default = dark editorial.
+const themeBootstrap = `
+(function(){
+  try {
+    var t = localStorage.getItem('openarg-theme');
+    if (t === 'light') document.documentElement.setAttribute('data-theme','light');
+  } catch(e){}
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${inter.variable} ${jbMono.variable} ${sourceSerif.variable}`}>
+    <html lang="es" className={`${inter.variable} ${jbMono.variable}`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
       <body>{children}</body>
     </html>
   );
