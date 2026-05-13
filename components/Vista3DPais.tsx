@@ -96,40 +96,13 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
       const prov = paisGeo.features.find((x) => (x.properties as any).provincia_id === provinciaSel);
       if (!prov) return;
       const bb = bboxOf(prov);
-      const center: [number, number] = [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2];
-      // Fase 1: fitBounds con padding asimétrico (left para sidebar 320, right para HUD 360)
+      // fitBounds + tilt sutil en un solo movimiento suave (~1100ms).
+      // Sin revolución: el 3D viene del pitch + extrusion editorial de la provincia.
       map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], {
         padding: { top: 100, right: 380, bottom: 100, left: 340 },
-        pitch: 60, bearing: 0, duration: 700, easing: easeOut, maxZoom: 7.5,
+        pitch: 50, bearing: -6, duration: 1100, easing: easeOut, maxZoom: 7.5,
       });
-      // Fase 2: orbit 360° usando rAF sobre setBearing
-      const orbitStartDelay = 700;
-      const orbitDuration = 2400;
-      const finalPitch = 52;
-      const finalBearing = 0;
-      const t0Schedule = setTimeout(() => {
-        const startTime = performance.now();
-        const startPitch = 60;
-        const startCenter = center;
-        const step = (now: number) => {
-          const t = Math.min(1, (now - startTime) / orbitDuration);
-          const e = easeInOut(t);
-          // Re-anchorar el centro por si el fitBounds desplazó un poco
-          map.setCenter(startCenter);
-          map.setBearing(e * 360); // full revolution
-          map.setPitch(startPitch + (finalPitch - startPitch) * e);
-          if (t < 1) {
-            orbitRafRef.current = requestAnimationFrame(step);
-          } else {
-            map.setBearing(finalBearing);
-            map.setPitch(finalPitch);
-            orbitRafRef.current = null;
-          }
-        };
-        orbitRafRef.current = requestAnimationFrame(step);
-      }, orbitStartDelay);
-      // cleanup function captura t0Schedule
-      return () => { clearTimeout(t0Schedule); };
+      void easeInOut;
     } else {
       map.easeTo({
         center: [-63.5, -38.5], zoom: 3.7, pitch: 0, bearing: 0,
