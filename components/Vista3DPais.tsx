@@ -208,14 +208,24 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     return { type: "FeatureCollection", features };
   }, [depsGeo, valoresDep]);
 
-  // CABA highlight FC — memoizado para que MapLibre no re-monte el Source en cada render.
+  // CABA highlight FC — devolvemos UNA Point feature en el centroide de CABA.
+  // A zoom país (3.7) el polígono real ocupa ~15px y se pierde; un dot en píxeles
+  // fijos es ceremonial, legible y siempre clickeable.
   const cabaHighlightFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
     if (!paisGeo) return null;
     const cabaFeature = paisGeo.features.find(
       (f) => (f.properties as any)?.provincia_id === "02"
     );
-    if (!cabaFeature) return null;
-    return { type: "FeatureCollection", features: [cabaFeature] };
+    const centroid = (cabaFeature?.properties as any)?.centroid as [number, number] | undefined;
+    if (!centroid) return null;
+    return {
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        geometry: { type: "Point", coordinates: centroid },
+        properties: { provincia_id: "02", nombre: "CABA" },
+      }],
+    };
   }, [paisGeo]);
 
   // Polígono unión de las 24 provincias — se computa UNA sola vez al cargar paisGeo.
@@ -384,7 +394,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         }}
         interactiveLayerIds={
           nivel === "pais"
-            ? ["caba-highlight-fill", "caba-highlight-line", "deps-fill"]
+            ? ["caba-highlight-dot", "deps-fill"]
             : ["deps-fill"]
         }
         onLoad={() => {
@@ -444,15 +454,17 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             <Layer
               id="deps-fill"
               type="fill"
-              filter={["!=", ["get", "provincia_id"], "02"]}
               paint={{
                 "fill-color": [
                   "interpolate", ["linear"], ["get", "intensity"],
                   0, CINDER[0], 0.2, CINDER[1], 0.4, CINDER[2],
                   0.6, CINDER[3], 0.8, CINDER[4], 1, CINDER[5],
                 ],
+                // CABA (provincia_id=02) → opacity 0: las 15 comunas se ocultan del choropleth;
+                // en su lugar el dot ceremonial las representa como una jurisdicción única.
                 "fill-opacity": [
                   "case",
+                  ["==", ["get", "provincia_id"], "02"], 0,
                   ["==", ["get", "departamento_id"], departamentoSel ?? "__none__"], 0.95,
                   ["==", ["get", "departamento_id"], hoverDepId ?? "__none__"], 0.88,
                   0.76,
@@ -462,18 +474,20 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             <Layer
               id="deps-border"
               type="line"
-              filter={["!=", ["get", "provincia_id"], "02"]}
               paint={{
                 "line-color": INK,
                 "line-width": 0.6,
-                "line-opacity": 0.55,
+                "line-opacity": [
+                  "case",
+                  ["==", ["get", "provincia_id"], "02"], 0,
+                  0.55,
+                ],
                 "line-blur": 0.3,
               }}
             />
             <Layer
               id="deps-stroke-active"
               type="line"
-              filter={["!=", ["get", "provincia_id"], "02"]}
               paint={{
                 "line-color": [
                   "case",
@@ -483,6 +497,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
                 ],
                 "line-width": [
                   "case",
+                  ["==", ["get", "provincia_id"], "02"], 0,
                   ["==", ["get", "departamento_id"], departamentoSel ?? "__none__"], 2,
                   ["==", ["get", "departamento_id"], hoverDepId ?? "__none__"], 1.4,
                   0,
@@ -535,26 +550,20 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           </Source>
         )}
 
-        {/* === CABA highlight: silueta REAL de la Ciudad con fill vermilion
-            + outline blanco grueso + label. Click anywhere abre inset. === */}
+        {/* === CABA highlight: dot ceremonial sobre el centroide de la Ciudad,
+            tamaño fijo en píxeles → siempre visible y clickeable a zoom país. === */}
         {nivel === "pais" && cabaHighlightFC && (
           <Source id="caba-highlight" type="geojson" data={cabaHighlightFC}>
             <Layer
-              id="caba-highlight-fill"
-              type="fill"
+              id="caba-highlight-dot"
+              type="circle"
               paint={{
-                "fill-color": "#C03A18",
-                "fill-opacity": hoverIsCaba ? 0.95 : 0.85,
-              }}
-            />
-            <Layer
-              id="caba-highlight-line"
-              type="line"
-              paint={{
-                "line-color": hoverIsCaba ? "#FFD04A" : "#FFFFFF",
-                "line-width": hoverIsCaba ? 6 : 4,
-                "line-opacity": 1,
-                "line-blur": 0.3,
+                "circle-radius": hoverIsCaba ? 16 : 14,
+                "circle-color": "#C03A18",
+                "circle-stroke-color": hoverIsCaba ? "#FFD04A" : "#FFFFFF",
+                "circle-stroke-width": hoverIsCaba ? 4 : 3,
+                "circle-opacity": 1,
+                "circle-pitch-alignment": "viewport",
               }}
             />
             <Layer
@@ -564,18 +573,18 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
                 "text-field": "CABA",
                 "text-font": ["Open Sans Regular"],
                 "text-size": 13,
-                "text-offset": [0, -1.6],
+                "text-offset": [0, -2.2],
                 "text-anchor": "bottom",
                 "text-letter-spacing": 0.18,
                 "text-allow-overlap": true,
                 "symbol-placement": "point",
               }}
-                paint={{
-                  "text-color": "#93C5F8",
-                  "text-halo-color": "#06090F",
-                  "text-halo-width": 1.6,
-                }}
-              />
+              paint={{
+                "text-color": "#93C5F8",
+                "text-halo-color": "#06090F",
+                "text-halo-width": 1.6,
+              }}
+            />
           </Source>
         )}
 
