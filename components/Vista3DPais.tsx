@@ -593,14 +593,14 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
               <span
                 style={{
                   display: "block",
-                  width: hoverIsCaba ? 44 : 38,
-                  height: hoverIsCaba ? 44 : 38,
+                  width: hoverIsCaba ? 22 : 19,
+                  height: hoverIsCaba ? 22 : 19,
                   borderRadius: "50%",
                   background: "#C03A18",
-                  border: `${hoverIsCaba ? 4 : 3}px solid ${hoverIsCaba ? "#FFD04A" : "#FFFFFF"}`,
+                  border: `${hoverIsCaba ? 3 : 2}px solid ${hoverIsCaba ? "#FFD04A" : "#FFFFFF"}`,
                   boxShadow: hoverIsCaba
-                    ? "0 0 0 6px rgba(246,180,14,0.25), 0 4px 16px rgba(0,0,0,0.55)"
-                    : "0 0 0 8px rgba(192,58,24,0.18), 0 2px 10px rgba(0,0,0,0.5)",
+                    ? "0 0 0 4px rgba(246,180,14,0.25), 0 2px 8px rgba(0,0,0,0.55)"
+                    : "0 0 0 5px rgba(192,58,24,0.18), 0 2px 6px rgba(0,0,0,0.5)",
                   transition: "all 160ms ease-out",
                 }}
               />
