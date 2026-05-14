@@ -3,6 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import MapGL, {
   Layer,
+  Marker,
   NavigationControl,
   Source,
   type MapRef,
@@ -17,6 +18,7 @@ import {
 import { loadPaisGeojson, loadDepartamentosAll } from "@/lib/data";
 import { computeIsobands, unionFeatureCollection } from "@/lib/isobands";
 import type { Dataset, Metric } from "@/lib/types";
+import CABAInset from "./CABAInset";
 
 // Estilo minimal: fondo desk plano, sin tiles externos. Argentina se dibuja
 // 100% desde nuestras geometrías → ningún artefacto de tessellation por mask
@@ -46,6 +48,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     delitoId, anio, metric,
     setDelito, setAnio, setMetric,
     selectProvincia, selectDepartamento, reset,
+    cabaInsetOpen, setCabaInset,
   } = useDashboard();
 
   const [paisGeo, setPaisGeo] = useState<GeoJSON.FeatureCollection | null>(null);
@@ -53,6 +56,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   const [hoverProvId, setHoverProvId] = useState<string | null>(null);
   const [hoverDepId, setHoverDepId] = useState<string | null>(null);
   const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number } | null>(null);
+  const [hoverIsCaba, setHoverIsCaba] = useState(false);
   const [viewState, setViewState] = useState({
     longitude: -63.5, latitude: -38.5, zoom: 3.7, pitch: 0, bearing: 0,
   });
@@ -77,6 +81,31 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     loadPaisGeojson().then(setPaisGeo).catch(console.error);
     loadDepartamentosAll().then(setDepsGeo).catch(console.error);
   }, []);
+
+  // onMapReady gating — fire SOLO cuando depsGeo/paisGeo están en estado React
+  // y los sources del mapa terminaron de procesar (idle event posterior).
+  //
+  // Fix race condition: el `idle` se gatillaba en onLoad con BASE_STYLE vacío,
+  // disparando setIntro("ready") antes de que el choropleth se renderizara.
+  // Resultado: mapa visualmente "roto" en primera carga; refresh lo arreglaba
+  // porque geomCache servía las geojsons sincrónicamente.
+  useEffect(() => {
+    if (!paisGeo || !depsGeo || !onMapReady) return;
+    const m = mapRef.current?.getMap();
+    if (!m) return;
+    let fired = false;
+    const fire = () => {
+      if (fired) return;
+      fired = true;
+      m.off("idle", fire);
+      onMapReady();
+    };
+    m.on("idle", fire);
+    // Safety: si por algún motivo idle no dispara (issues documentados con
+    // ciertos sources GeoJSON in-memory), forzamos onMapReady tras 4s.
+    const timeout = setTimeout(fire, 4000);
+    return () => { m.off("idle", fire); clearTimeout(timeout); };
+  }, [paisGeo, depsGeo, onMapReady]);
 
   // Resize defensivo.
   useEffect(() => {
@@ -108,6 +137,10 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     const easeInOut = (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
     if (departamentoSel) {
+      // Si el inset CABA está abierto y la comuna seleccionada es de CABA,
+      // mantenemos vista nacional — el inset gestiona su propia cámara local.
+      const isCabaComuna = departamentoSel.startsWith("02") && cabaInsetOpen;
+      if (isCabaComuna) return;
       const f = depsGeo.features.find((x) => (x.properties as any).departamento_id === departamentoSel);
       const c = (f?.properties as any)?.centroid as [number, number] | undefined;
       if (c) {
@@ -142,7 +175,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         duration: 1200, easing: easeOut,
       });
     }
-  }, [provinciaSel, departamentoSel, paisGeo, depsGeo]);
+  }, [provinciaSel, departamentoSel, paisGeo, depsGeo, cabaInsetOpen, isMobile]);
 
   // Cleanup al desmontar
   useEffect(() => () => {
@@ -200,6 +233,9 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     }));
     return { type: "FeatureCollection", features };
   }, [depsGeo, valoresDep]);
+
+  // CABA: el marker HTML (componente <Marker> de react-map-gl) maneja todo —
+  // posición, click y hover. Sin Source/Layer ni proximity guards.
 
   // Polígono unión de las 24 provincias — se computa UNA sola vez al cargar paisGeo.
   // turf.union sobre 24 features cuesta ~150-200ms, antes corría en cada compute de
@@ -323,6 +359,8 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         dragRotate={false}
         touchPitch={false}
         onMouseMove={(e) => {
+          // CABA: el marker HTML maneja su propio hover via onMouseEnter/Leave.
+          // Acá solo lidiamos con features del map (deptos).
           const f = e.features?.[0];
           const props = f?.properties ?? {};
           const depId = (props.departamento_id as string | undefined) ?? null;
@@ -338,10 +376,10 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         }}
         onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); setHoverPoint(null); }}
         onClick={(e) => {
+          // CABA: el marker HTML lo maneja con su propio onClick.
           const f = e.features?.[0];
           const props = (f?.properties ?? {}) as any;
           if (nivel === "pais") {
-            // Click a un depto: identificamos la provincia del depto y la seleccionamos.
             const depId = props.departamento_id as string | undefined;
             if (!depId) return;
             const dep = dataset.departamentos.find((d) => d.id === depId);
@@ -365,12 +403,13 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             padding: pad as any,
             duration: 0,
           });
-          if (!onMapReady) return;
-          const once = () => { m.off("idle", once); onMapReady(); };
-          m.on("idle", once);
+          // Nota: el listener `idle` para onMapReady se setupea en un useEffect
+          // separado gated por `depsEnriched` — acá no, porque `idle` dispara
+          // inmediatamente al cargar el BASE_STYLE (sin sources) y el intro fade
+          // out se gatillaría antes de que el choropleth aparezca.
         }}
         style={{ height: "100%", width: "100%", background: DESK }}
-        cursor={(nivel === "pais" ? hoverProvId : hoverDepId) ? "pointer" : "default"}
+        cursor={(nivel === "pais" ? (hoverProvId || hoverIsCaba) : hoverDepId) ? "pointer" : "default"}
       >
         <NavigationControl position="bottom-left" visualizePitch={false} showCompass={false} showZoom />
 
@@ -416,8 +455,11 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
                   0, CINDER[0], 0.2, CINDER[1], 0.4, CINDER[2],
                   0.6, CINDER[3], 0.8, CINDER[4], 1, CINDER[5],
                 ],
+                // CABA (provincia_id=02) → opacity 0: las 15 comunas se ocultan del choropleth;
+                // en su lugar el dot ceremonial las representa como una jurisdicción única.
                 "fill-opacity": [
                   "case",
+                  ["==", ["get", "provincia_id"], "02"], 0,
                   ["==", ["get", "departamento_id"], departamentoSel ?? "__none__"], 0.95,
                   ["==", ["get", "departamento_id"], hoverDepId ?? "__none__"], 0.88,
                   0.76,
@@ -430,7 +472,11 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
               paint={{
                 "line-color": INK,
                 "line-width": 0.6,
-                "line-opacity": 0.55,
+                "line-opacity": [
+                  "case",
+                  ["==", ["get", "provincia_id"], "02"], 0,
+                  0.55,
+                ],
                 "line-blur": 0.3,
               }}
             />
@@ -446,6 +492,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
                 ],
                 "line-width": [
                   "case",
+                  ["==", ["get", "provincia_id"], "02"], 0,
                   ["==", ["get", "departamento_id"], departamentoSel ?? "__none__"], 2,
                   ["==", ["get", "departamento_id"], hoverDepId ?? "__none__"], 1.4,
                   0,
@@ -496,6 +543,69 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
               }}
             />
           </Source>
+        )}
+
+        {/* === CABA marker: elemento HTML real con click handler propio.
+            Se renderiza a nivel país Y cuando provinciaSel="06" (BA rodea
+            geográficamente a CABA, ahí es donde el usuario tiende a quedar
+            atrapado por drill-down accidental). Es un DOM element — el click
+            NO depende del feature hit-test de MapLibre. Imposible de fallar. === */}
+        {(nivel === "pais" || provinciaSel === "06") && (
+          <Marker longitude={-58.444} latitude={-34.611} anchor="center">
+            <button
+              type="button"
+              aria-label="Abrir Ciudad Autónoma de Buenos Aires"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCabaInset(true);
+              }}
+              onMouseEnter={() => setHoverIsCaba(true)}
+              onMouseLeave={() => setHoverIsCaba(false)}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 4,
+                padding: 0,
+                margin: 0,
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                userSelect: "none",
+                pointerEvents: "auto",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--font-inter), system-ui, sans-serif",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.18em",
+                  color: "#93C5F8",
+                  textShadow: "0 0 4px #06090F, 0 0 4px #06090F",
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap",
+                  marginBottom: 2,
+                }}
+              >
+                CABA
+              </span>
+              <span
+                style={{
+                  display: "block",
+                  width: hoverIsCaba ? 22 : 19,
+                  height: hoverIsCaba ? 22 : 19,
+                  borderRadius: "50%",
+                  background: "#C03A18",
+                  border: `${hoverIsCaba ? 3 : 2}px solid ${hoverIsCaba ? "#FFD04A" : "#FFFFFF"}`,
+                  boxShadow: hoverIsCaba
+                    ? "0 0 0 4px rgba(246,180,14,0.25), 0 2px 8px rgba(0,0,0,0.55)"
+                    : "0 0 0 5px rgba(192,58,24,0.18), 0 2px 6px rgba(0,0,0,0.5)",
+                  transition: "all 160ms ease-out",
+                }}
+              />
+            </button>
+          </Marker>
         )}
 
         {/* Mask removida: el basemap minimal con background color "#06090F" ya cubre
@@ -863,6 +973,23 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           metric={metric}
           anchorPx={depAnchorPx}
           onClose={() => selectDepartamento(null)}
+        />
+      )}
+
+      {/* === Inset CABA (mini-mapa flotante con las 15 comunas) === */}
+      {cabaInsetOpen && (
+        <CABAInset
+          dataset={dataset}
+          depsGeo={depsGeo}
+          valoresDep={valoresDep}
+          delitoId={delitoId}
+          anio={anio}
+          metric={metric}
+          isMobile={isMobile}
+          collapsed={!!departamentoSel && departamentoSel.startsWith("02")}
+          selectedDepId={departamentoSel}
+          onClose={() => setCabaInset(false)}
+          onSelectComuna={(id) => selectDepartamento(id)}
         />
       )}
     </div>
