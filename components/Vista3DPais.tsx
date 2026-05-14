@@ -208,6 +208,16 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     return { type: "FeatureCollection", features };
   }, [depsGeo, valoresDep]);
 
+  // CABA highlight FC — memoizado para que MapLibre no re-monte el Source en cada render.
+  const cabaHighlightFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!paisGeo) return null;
+    const cabaFeature = paisGeo.features.find(
+      (f) => (f.properties as any)?.provincia_id === "02"
+    );
+    if (!cabaFeature) return null;
+    return { type: "FeatureCollection", features: [cabaFeature] };
+  }, [paisGeo]);
+
   // Polígono unión de las 24 provincias — se computa UNA sola vez al cargar paisGeo.
   // turf.union sobre 24 features cuesta ~150-200ms, antes corría en cada compute de
   // isobands → INP fix: memoizado fuera del compute.
@@ -525,57 +535,49 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           </Source>
         )}
 
-        {/* === CABA highlight: silueta REAL de la Ciudad con outline cobalt
-            grueso + fill cobalt translucido + label. Click en cualquier parte
-            del polígono abre el inset. Solo a nivel país. === */}
-        {nivel === "pais" && paisGeo && (() => {
-          const cabaFeature = paisGeo.features.find(
-            (f) => (f.properties as any)?.provincia_id === "02"
-          );
-          if (!cabaFeature) return null;
-          const cabaFC = { type: "FeatureCollection", features: [cabaFeature] } as any;
-          return (
-            <Source id="caba-highlight" type="geojson" data={cabaFC}>
-              <Layer
-                id="caba-highlight-fill"
-                type="fill"
-                paint={{
-                  "fill-color": "#C03A18",
-                  "fill-opacity": hoverIsCaba ? 0.95 : 0.85,
-                }}
-              />
-              <Layer
-                id="caba-highlight-line"
-                type="line"
-                paint={{
-                  "line-color": hoverIsCaba ? "#FFD04A" : "#FFFFFF",
-                  "line-width": hoverIsCaba ? 6 : 4,
-                  "line-opacity": 1,
-                  "line-blur": 0.3,
-                }}
-              />
-              <Layer
-                id="caba-highlight-label"
-                type="symbol"
-                layout={{
-                  "text-field": "CABA",
-                  "text-font": ["Open Sans Regular"],
-                  "text-size": 13,
-                  "text-offset": [0, -1.6],
-                  "text-anchor": "bottom",
-                  "text-letter-spacing": 0.18,
-                  "text-allow-overlap": true,
-                  "symbol-placement": "point",
-                }}
+        {/* === CABA highlight: silueta REAL de la Ciudad con fill vermilion
+            + outline blanco grueso + label. Click anywhere abre inset. === */}
+        {nivel === "pais" && cabaHighlightFC && (
+          <Source id="caba-highlight" type="geojson" data={cabaHighlightFC}>
+            <Layer
+              id="caba-highlight-fill"
+              type="fill"
+              paint={{
+                "fill-color": "#C03A18",
+                "fill-opacity": hoverIsCaba ? 0.95 : 0.85,
+              }}
+            />
+            <Layer
+              id="caba-highlight-line"
+              type="line"
+              paint={{
+                "line-color": hoverIsCaba ? "#FFD04A" : "#FFFFFF",
+                "line-width": hoverIsCaba ? 6 : 4,
+                "line-opacity": 1,
+                "line-blur": 0.3,
+              }}
+            />
+            <Layer
+              id="caba-highlight-label"
+              type="symbol"
+              layout={{
+                "text-field": "CABA",
+                "text-font": ["Open Sans Regular"],
+                "text-size": 13,
+                "text-offset": [0, -1.6],
+                "text-anchor": "bottom",
+                "text-letter-spacing": 0.18,
+                "text-allow-overlap": true,
+                "symbol-placement": "point",
+              }}
                 paint={{
                   "text-color": "#93C5F8",
                   "text-halo-color": "#06090F",
                   "text-halo-width": 1.6,
                 }}
               />
-            </Source>
-          );
-        })()}
+          </Source>
+        )}
 
         {/* Mask removida: el basemap minimal con background color "#06090F" ya cubre
             todo lo no-Argentina. Sin mask geojson → sin tessellation artifacts. */}
@@ -663,15 +665,6 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             </h1>
             <p className="mt-3 text-[11.5px] leading-snug text-white/55">
               {dataset.provincias.length} provincias · {dataset.departamentos.length} departamentos · {dataset.delitos.length} categorías SNIC.
-            </p>
-            <button
-              onClick={() => setCabaInset(true)}
-              className="press-feedback mt-3 inline-flex items-center gap-1.5 text-[11.5px] text-amber-300/90 transition hover:text-amber-300"
-            >
-              Ciudad Autónoma de Buenos Aires →
-            </button>
-            <p className="mt-1 text-[10px] leading-snug text-white/40">
-              click para ver los datos de CABA
             </p>
           </div>
         ) : (
