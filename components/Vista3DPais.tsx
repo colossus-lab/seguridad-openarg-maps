@@ -434,6 +434,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             <Layer
               id="deps-fill"
               type="fill"
+              filter={["!=", ["get", "provincia_id"], "02"]}
               paint={{
                 "fill-color": [
                   "interpolate", ["linear"], ["get", "intensity"],
@@ -451,6 +452,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             <Layer
               id="deps-border"
               type="line"
+              filter={["!=", ["get", "provincia_id"], "02"]}
               paint={{
                 "line-color": INK,
                 "line-width": 0.6,
@@ -461,6 +463,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             <Layer
               id="deps-stroke-active"
               type="line"
+              filter={["!=", ["get", "provincia_id"], "02"]}
               paint={{
                 "line-color": [
                   "case",
@@ -537,18 +540,17 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
                 id="caba-highlight-fill"
                 type="fill"
                 paint={{
-                  "fill-color": "#74ACDF",
-                  "fill-opacity": hoverIsCaba ? 0.45 : 0.22,
+                  "fill-color": "#FFD04A",
+                  "fill-opacity": hoverIsCaba ? 0.95 : 0.82,
                 }}
               />
               <Layer
                 id="caba-highlight-line"
                 type="line"
                 paint={{
-                  "line-color": hoverIsCaba ? "#FFD04A" : "#93C5F8",
-                  "line-width": hoverIsCaba ? 6 : 4,
+                  "line-color": hoverIsCaba ? "#F6B40E" : "#06090F",
+                  "line-width": hoverIsCaba ? 4 : 1.5,
                   "line-opacity": 1,
-                  "line-blur": 0.5,
                 }}
               />
               <Layer

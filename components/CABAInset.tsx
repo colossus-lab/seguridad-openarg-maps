@@ -72,24 +72,6 @@ export default function CABAInset({
     return { type: "FeatureCollection", features: enriched };
   }, [depsGeo, valoresDep]);
 
-  // Lista de comunas para el panel inferior, ordenada desc por valor.
-  const comunasList = useMemo(() => {
-    if (!depsGeo) return [];
-    return depsGeo.features
-      .filter((f) => (f.properties as any)?.provincia_id === "02")
-      .map((f) => {
-        const props = f.properties as any;
-        return {
-          id: props.departamento_id as string,
-          nombre: (props.nombre as string) ?? props.departamento_id,
-          value: valoresDep.get(props.departamento_id) ?? 0,
-        };
-      })
-      .sort((a, b) => b.value - a.value);
-  }, [depsGeo, valoresDep]);
-
-  const maxValue = comunasList[0]?.value ?? 1;
-
   // Stats agregados de CABA (provincia "02").
   const provIdx = useMemo(
     () => dataset.provincias.findIndex((p) => p.id === "02"),
@@ -303,45 +285,6 @@ export default function CABAInset({
             </div>
           )}
 
-          {/* === Lista 15 comunas === */}
-          <div className="mt-4 border-t border-white/10 px-5 pb-4 pt-3">
-            <div className="mb-2 flex items-baseline justify-between">
-              <div className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-amber-300/85">
-                Comunas · ordenadas desc
-              </div>
-              <div className="text-[8.5px] uppercase tracking-[0.16em] text-white/35 mono">{anio}</div>
-            </div>
-            <ul className="space-y-2">
-              {comunasList.map((c) => {
-                const isSel = selectedDepId === c.id;
-                const isHover = hoverComunaId === c.id;
-                const widthPct = maxValue > 0 ? (c.value / maxValue) * 100 : 0;
-                return (
-                  <li key={c.id}>
-                    <button
-                      onClick={() => onSelectComuna(c.id)}
-                      onMouseEnter={() => setHoverComunaId(c.id)}
-                      onMouseLeave={() => setHoverComunaId((cur) => (cur === c.id ? null : cur))}
-                      className={`group flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left transition ${isSel ? "bg-amber-300/10" : isHover ? "bg-white/5" : "hover:bg-white/5"}`}
-                    >
-                      <span className={`min-w-0 flex-1 truncate text-[12px] ${isSel ? "text-white" : "text-white/85"}`}>
-                        {c.nombre}
-                      </span>
-                      <span className="relative h-1 w-[100px] overflow-hidden rounded-full bg-white/10">
-                        <span
-                          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-amber-300 to-amber-100"
-                          style={{ width: `${widthPct}%` }}
-                        />
-                      </span>
-                      <span className="w-[58px] text-right text-[11.5px] font-semibold text-white num mono">
-                        {c.value.toLocaleString("es-AR", { maximumFractionDigits: metric === "tasa" ? 1 : 0 })}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
         </>
       )}
     </div>
