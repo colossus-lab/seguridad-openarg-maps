@@ -540,17 +540,18 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
                 id="caba-highlight-fill"
                 type="fill"
                 paint={{
-                  "fill-color": "#FFD04A",
-                  "fill-opacity": hoverIsCaba ? 0.95 : 0.82,
+                  "fill-color": "#C03A18",
+                  "fill-opacity": hoverIsCaba ? 0.95 : 0.85,
                 }}
               />
               <Layer
                 id="caba-highlight-line"
                 type="line"
                 paint={{
-                  "line-color": hoverIsCaba ? "#F6B40E" : "#06090F",
-                  "line-width": hoverIsCaba ? 4 : 1.5,
+                  "line-color": hoverIsCaba ? "#FFD04A" : "#FFFFFF",
+                  "line-width": hoverIsCaba ? 6 : 4,
                   "line-opacity": 1,
+                  "line-blur": 0.3,
                 }}
               />
               <Layer
