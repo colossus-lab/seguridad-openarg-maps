@@ -55,7 +55,6 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   const [hoverProvId, setHoverProvId] = useState<string | null>(null);
   const [hoverDepId, setHoverDepId] = useState<string | null>(null);
   const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number } | null>(null);
-  const [hoverIsCaba, setHoverIsCaba] = useState(false);
   const [viewState, setViewState] = useState({
     longitude: -63.5, latitude: -38.5, zoom: 3.7, pitch: 0, bearing: 0,
   });
@@ -331,15 +330,6 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         touchPitch={false}
         onMouseMove={(e) => {
           const f = e.features?.[0];
-          // CABA marker has its own hover.
-          if (f?.layer?.id === "caba-marker-dot" || f?.layer?.id === "caba-marker-halo") {
-            setHoverIsCaba(true);
-            setHoverProvId(null);
-            setHoverDepId(null);
-            setHoverPoint(null);
-            return;
-          }
-          setHoverIsCaba(false);
           const props = f?.properties ?? {};
           const depId = (props.departamento_id as string | undefined) ?? null;
           setHoverDepId(depId);
@@ -352,17 +342,11 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             setHoverPoint(null);
           }
         }}
-        onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); setHoverPoint(null); setHoverIsCaba(false); }}
+        onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); setHoverPoint(null); }}
         onClick={(e) => {
           const f = e.features?.[0];
           const props = (f?.properties ?? {}) as any;
-          // CABA marker abre el inset (no drill-down al mapa principal).
-          if (f?.layer?.id === "caba-marker-dot" || f?.layer?.id === "caba-marker-halo") {
-            setCabaInset(true);
-            return;
-          }
           if (nivel === "pais") {
-            // Click a un depto: identificamos la provincia del depto y la seleccionamos.
             const depId = props.departamento_id as string | undefined;
             if (!depId) return;
             const dep = dataset.departamentos.find((d) => d.id === depId);
@@ -373,7 +357,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             selectDepartamento(depId === departamentoSel ? null : depId);
           }
         }}
-        interactiveLayerIds={nivel === "pais" ? ["caba-marker-dot", "caba-marker-halo", "deps-fill"] : ["deps-fill"]}
+        interactiveLayerIds={["deps-fill"]}
         onLoad={() => {
           const m = mapRef.current?.getMap();
           if (!m) return;
@@ -391,7 +375,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           m.on("idle", once);
         }}
         style={{ height: "100%", width: "100%", background: DESK }}
-        cursor={(nivel === "pais" ? (hoverProvId || hoverIsCaba) : hoverDepId) ? "pointer" : "default"}
+        cursor={(nivel === "pais" ? hoverProvId : hoverDepId) ? "pointer" : "default"}
       >
         <NavigationControl position="bottom-left" visualizePitch={false} showCompass={false} showZoom />
 
@@ -519,63 +503,9 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           </Source>
         )}
 
-        {/* === CABA marker: dot ceremonial sobre la Ciudad. Sin él, las 15 comunas
-            (~3px cada una a zoom país) son imposibles de clickear y los partidos
-            del Conurbano roban todos los clicks. Solo a nivel país. === */}
-        {nivel === "pais" && (
-          <Source
-            id="caba-marker"
-            type="geojson"
-            data={{
-              type: "FeatureCollection",
-              features: [{
-                type: "Feature",
-                properties: { is_caba: true },
-                geometry: { type: "Point", coordinates: [-58.444, -34.611] },
-              }],
-            } as any}
-          >
-            <Layer
-              id="caba-marker-halo"
-              type="circle"
-              paint={{
-                "circle-radius": hoverIsCaba ? 18 : 14,
-                "circle-color": "#FFD04A",
-                "circle-opacity": 0.18,
-                "circle-stroke-width": 0,
-              }}
-            />
-            <Layer
-              id="caba-marker-dot"
-              type="circle"
-              paint={{
-                "circle-radius": hoverIsCaba ? 8 : 6,
-                "circle-color": "#FFD04A",
-                "circle-stroke-color": "#06090F",
-                "circle-stroke-width": 1.5,
-                "circle-opacity": 0.95,
-              }}
-            />
-            <Layer
-              id="caba-marker-label"
-              type="symbol"
-              layout={{
-                "text-field": "CABA",
-                "text-font": ["Open Sans Regular"],
-                "text-size": 11,
-                "text-offset": [0, 1.6],
-                "text-anchor": "top",
-                "text-letter-spacing": 0.18,
-                "text-allow-overlap": true,
-              }}
-              paint={{
-                "text-color": "#FFD04A",
-                "text-halo-color": "#06090F",
-                "text-halo-width": 1.4,
-              }}
-            />
-          </Source>
-        )}
+        {/* CABA: el dot/marker en el mapa no es viable a este zoom (las comunas
+            son tan chicas que clicks vecinos roban picking). El acceso a CABA
+            vive en el sidebar como botón explícito → setCabaInset(true). */}
 
         {/* Mask removida: el basemap minimal con background color "#06090F" ya cubre
             todo lo no-Argentina. Sin mask geojson → sin tessellation artifacts. */}
@@ -663,6 +593,15 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             </h1>
             <p className="mt-3 text-[11.5px] leading-snug text-white/55">
               {dataset.provincias.length} provincias · {dataset.departamentos.length} departamentos · {dataset.delitos.length} categorías SNIC.
+            </p>
+            <button
+              onClick={() => setCabaInset(true)}
+              className="press-feedback mt-3 inline-flex items-center gap-1.5 text-[11.5px] text-amber-300/90 transition hover:text-amber-300"
+            >
+              Ciudad Autónoma de Buenos Aires →
+            </button>
+            <p className="mt-1 text-[10px] leading-snug text-white/40">
+              click para ver los datos de CABA
             </p>
           </div>
         ) : (
