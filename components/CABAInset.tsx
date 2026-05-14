@@ -3,7 +3,12 @@
 import { useMemo, useState } from "react";
 import MapGL, { Layer, Source } from "react-map-gl/maplibre";
 import type { Dataset, Metric } from "@/lib/types";
-import { totalProvincia } from "@/lib/analytics";
+import {
+  totalProvincia,
+  topNDelitosProvincia,
+  serieProvincia,
+  evolucion5Anios,
+} from "@/lib/analytics";
 
 // Style minimal navy para el inset MapGL — mismo background que el mapa principal.
 const INSET_STYLE: any = {
@@ -93,6 +98,7 @@ export default function CABAInset({
   const ai = useMemo(() => dataset.anios.indexOf(anio), [dataset, anio]);
   const isAll = delitoId === "all";
   const di = isAll ? -1 : dataset.delitos.findIndex((d) => d.id === delitoId);
+  const delitoNombre = isAll ? "" : dataset.delitos.find((d) => d.id === delitoId)?.nombre ?? "";
   const tasaCaba = isAll
     ? 0
     : di >= 0
@@ -103,6 +109,24 @@ export default function CABAInset({
     : di >= 0
       ? dataset.prov_hechos[provIdx]?.[di]?.[ai] ?? 0
       : 0;
+
+  // Top 5 categorías de CABA + serie 5 años por categoría + Δ 5 años global.
+  const top5 = useMemo(
+    () => topNDelitosProvincia(dataset, provIdx, ai, 5),
+    [dataset, provIdx, ai]
+  );
+  const maxTop5 = top5[0]?.hechos ?? 1;
+  const top5Series = useMemo(() => {
+    const from = Math.max(0, ai - 4);
+    return top5.map((r) => {
+      const s = serieProvincia(dataset, provIdx, r.id, "hechos");
+      return s.slice(from, ai + 1);
+    });
+  }, [dataset, provIdx, ai, top5]);
+  const evo = useMemo(() => {
+    const serie = serieProvincia(dataset, provIdx, isAll ? "all" : delitoId, "hechos");
+    return evolucion5Anios(serie, ai);
+  }, [dataset, provIdx, ai, delitoId, isAll]);
 
   const containerCls = isMobile
     ? "pointer-events-auto fixed inset-x-0 bottom-0 z-30 max-h-[88vh] overflow-y-auto rounded-t-2xl border-t border-amber-300/30 bg-black/92 px-5 pb-6 pt-3 backdrop-blur-md anim-fade-up"
@@ -210,7 +234,7 @@ export default function CABAInset({
           </div>
 
           {/* === Stats CABA agregados === */}
-          <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/10 px-5 pt-3">
+          <div className="mt-3 grid grid-cols-3 gap-3 border-t border-white/10 px-5 pt-3">
             <div>
               <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-amber-300/85">
                 {isAll ? "Tasa avg" : "Tasa /100k"}
@@ -218,7 +242,7 @@ export default function CABAInset({
               <div className="mt-0.5 text-[18px] font-semibold leading-none tracking-tight text-white num">
                 {isAll ? "—" : tasaCaba.toLocaleString("es-AR", { maximumFractionDigits: 1 })}
               </div>
-              <div className="mt-0.5 text-[9.5px] text-white/45">{isAll ? "" : "/100k hab."}</div>
+              <div className="mt-0.5 text-[9.5px] text-white/45">{isAll ? "" : "/100k"}</div>
             </div>
             <div>
               <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/45">Hechos</div>
@@ -227,7 +251,57 @@ export default function CABAInset({
               </div>
               <div className="mt-0.5 text-[9.5px] text-white/45">{isAll ? "SNIC total" : "del filtro"}</div>
             </div>
+            <div>
+              <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/45">Δ 5 años</div>
+              <div className={`mt-0.5 text-[18px] font-semibold leading-none tracking-tight num ${evo.deltaPct === null ? "text-white/45" : evo.deltaPct >= 5 ? "text-rose-300" : evo.deltaPct <= -5 ? "text-emerald-300" : "text-white"}`}>
+                {evo.deltaPct === null ? "—" : `${evo.deltaPct >= 0 ? "+" : ""}${evo.deltaPct.toFixed(1)}%`}
+              </div>
+              <div className="mt-0.5 text-[9.5px] text-white/45">vs prom 5a</div>
+            </div>
           </div>
+
+          {/* Label contextual cuando filtro de delito específico tiene cero hechos. */}
+          {!isAll && hechosCaba === 0 && top5.length > 0 && (
+            <p className="mt-3 px-5 text-[10.5px] leading-snug text-white/55">
+              Cero hechos de <span className="text-white/80">{delitoNombre}</span> en CABA en {anio}. Las categorías con actividad aparecen abajo.
+            </p>
+          )}
+
+          {/* === Top 5 categorías a nivel CABA (provincia entera) === */}
+          {top5.length > 0 && (
+            <div className="mt-4 border-t border-white/10 px-5 pt-3">
+              <div className="mb-2 flex items-baseline justify-between">
+                <div className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-amber-300/85">
+                  Top 5 categorías · CABA · {anio}
+                </div>
+                <div className="text-[8.5px] uppercase tracking-[0.16em] text-white/35 mono">
+                  evolución {anio - 4}–{anio}
+                </div>
+              </div>
+              <ul className="space-y-3">
+                {top5.map((r, i) => (
+                  <li key={r.id} className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[12px] text-white/90">{r.nombre}</div>
+                      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/8">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-300"
+                          style={{ width: `${(r.hechos / maxTop5) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <Sparkline values={top5Series[i]} color="#FFD04A" width={56} height={18} />
+                    <div className="w-[58px] text-right">
+                      <div className="text-[11.5px] font-semibold text-white num">
+                        {r.hechos.toLocaleString("es-AR")}
+                      </div>
+                      <div className="text-[9.5px] text-white/45 mono num">{r.pct.toFixed(1)}%</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* === Lista 15 comunas === */}
           <div className="mt-4 border-t border-white/10 px-5 pb-4 pt-3">
@@ -271,5 +345,31 @@ export default function CABAInset({
         </>
       )}
     </div>
+  );
+}
+
+/** Mini sparkline SVG (line + área tenue). Replica del Vista3DPais. */
+function Sparkline({
+  values, color = "#FFD04A", width = 64, height = 18,
+}: {
+  values: number[]; color?: string; width?: number; height?: number;
+}) {
+  if (values.length < 2) return <svg width={width} height={height} aria-hidden="true" />;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const px = (i: number) => (i / (values.length - 1)) * (width - 2) + 1;
+  const py = (v: number) => height - 2 - ((v - min) / range) * (height - 4);
+  const pts = values.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`);
+  const linePath = `M ${pts.join(" L ")}`;
+  const areaPath = `M ${px(0).toFixed(1)},${height - 1} L ${pts.join(" L ")} L ${px(values.length - 1).toFixed(1)},${height - 1} Z`;
+  const lastX = px(values.length - 1);
+  const lastY = py(values[values.length - 1]);
+  return (
+    <svg width={width} height={height} aria-hidden="true">
+      <path d={areaPath} fill={color} fillOpacity="0.16" />
+      <path d={linePath} fill="none" stroke={color} strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lastX} cy={lastY} r="1.8" fill={color} />
+    </svg>
   );
 }
