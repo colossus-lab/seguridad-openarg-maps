@@ -1,19 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import MapGL, { Layer, Source } from "react-map-gl/maplibre";
 import type { Dataset, Metric } from "@/lib/types";
-import { totalProvincia, valorProvincia } from "@/lib/analytics";
+import { totalProvincia } from "@/lib/analytics";
 
-// Choropleth CINDER editorial — same as Vista3DPais.
-const CINDER = ["#3D4A66", "#5C7FB0", "#74ACDF", "#FFD04A", "#F6B40E", "#C03A18"];
-
-// CABA bbox (lat/lon) — fixed, calibrated against pais.geojson "Ciudad
-// Autónoma" feature. Used to project the 15 comunas to a local SVG viewport.
-const CABA_BBOX = { minLon: -58.531, maxLon: -58.337, minLat: -34.701, maxLat: -34.528 };
-
-// SVG viewport (square; aspect mostly preserved since CABA is roughly square).
-const SVG_W = 320;
-const SVG_H = 320;
+// Style minimal navy para el inset MapGL — mismo background que el mapa principal.
+const INSET_STYLE: any = {
+  version: 8,
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  sources: {},
+  layers: [
+    { id: "background", type: "background", paint: { "background-color": "#06090F" } },
+  ],
+};
 
 type Props = {
   dataset: Dataset;
@@ -23,42 +23,11 @@ type Props = {
   anio: number;
   metric: Metric;
   isMobile: boolean;
-  collapsed: boolean;             // true cuando hay departamentoSel CABA → solo header
+  collapsed: boolean;             // true cuando hay departamentoSel CABA → header solo
   onClose: () => void;
   onSelectComuna: (id: string) => void;
-  selectedDepId: string | null;   // departamento seleccionado actual (para highlight)
+  selectedDepId: string | null;
 };
-
-function projectLonLat(lon: number, lat: number): [number, number] {
-  const dLon = CABA_BBOX.maxLon - CABA_BBOX.minLon;
-  const dLat = CABA_BBOX.maxLat - CABA_BBOX.minLat;
-  const x = ((lon - CABA_BBOX.minLon) / dLon) * SVG_W;
-  const y = SVG_H - ((lat - CABA_BBOX.minLat) / dLat) * SVG_H;
-  return [x, y];
-}
-
-function ringToPath(ring: number[][]): string {
-  if (ring.length < 3) return "";
-  const parts: string[] = [];
-  let first = true;
-  for (const [lon, lat] of ring) {
-    const [x, y] = projectLonLat(lon, lat);
-    parts.push((first ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1));
-    first = false;
-  }
-  parts.push("Z");
-  return parts.join("");
-}
-
-function geomToPath(geom: GeoJSON.Geometry): string {
-  if (geom.type === "Polygon") {
-    return geom.coordinates.map(ringToPath).join("");
-  }
-  if (geom.type === "MultiPolygon") {
-    return geom.coordinates.flatMap((poly) => poly.map(ringToPath)).join("");
-  }
-  return "";
-}
 
 export default function CABAInset({
   dataset, depsGeo, valoresDep, delitoId, anio, metric,
@@ -66,26 +35,16 @@ export default function CABAInset({
 }: Props) {
   const [hoverComunaId, setHoverComunaId] = useState<string | null>(null);
 
-  // 15 comunas: features de CABA + paths proyectados + valores.
-  const comunas = useMemo(() => {
-    if (!depsGeo) return [];
-    const provIdx = dataset.provincias.findIndex((p) => p.id === "02");
-    void provIdx;
-    return depsGeo.features
-      .filter((f) => (f.properties as any)?.provincia_id === "02")
-      .map((f) => {
-        const props = f.properties as any;
-        const id = props.departamento_id as string;
-        const nombre = (props.nombre as string) ?? id;
-        const value = valoresDep.get(id) ?? 0;
-        const path = geomToPath(f.geometry);
-        return { id, nombre, value, path };
-      });
-  }, [depsGeo, dataset, valoresDep]);
-
-  // Percentile rank LOCAL a CABA (no global) → mejor distinción visual entre las 15.
-  const intensities = useMemo(() => {
-    const positives = comunas.map((c) => c.value).filter((v) => v > 0).sort((a, b) => a - b);
+  // FeatureCollection con las 15 comunas + intensity local.
+  const comunasFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!depsGeo) return null;
+    const features = depsGeo.features.filter(
+      (f) => (f.properties as any)?.provincia_id === "02"
+    );
+    const values = features.map(
+      (f) => valoresDep.get((f.properties as any).departamento_id) ?? 0
+    );
+    const positives = values.filter((v) => v > 0).slice().sort((a, b) => a - b);
     const N = positives.length;
     const pct = (v: number) => {
       if (v <= 0 || N === 0) return 0;
@@ -96,54 +55,67 @@ export default function CABAInset({
       }
       return 0.08 + ((lo + 1) / N) * 0.92;
     };
-    return new Map(comunas.map((c) => [c.id, pct(c.value)]));
-  }, [comunas]);
+    const enriched = features.map((f, i) => ({
+      type: "Feature" as const,
+      geometry: f.geometry,
+      properties: {
+        ...(f.properties ?? {}),
+        value: values[i],
+        intensity: pct(values[i]),
+      },
+    }));
+    return { type: "FeatureCollection", features: enriched };
+  }, [depsGeo, valoresDep]);
 
-  // Color por comuna via interpolación CINDER.
-  const colorFor = (intensity: number): string => {
-    if (intensity <= 0) return CINDER[0];
-    const i = Math.min(intensity, 1) * 5;
-    const lo = Math.floor(i);
-    const hi = Math.min(lo + 1, 5);
-    const t = i - lo;
-    // simple linear interp en RGB
-    const a = CINDER[lo], b = CINDER[hi];
-    const ra = parseInt(a.slice(1, 3), 16), ga = parseInt(a.slice(3, 5), 16), ba = parseInt(a.slice(5, 7), 16);
-    const rb = parseInt(b.slice(1, 3), 16), gb = parseInt(b.slice(3, 5), 16), bb = parseInt(b.slice(5, 7), 16);
-    const r = Math.round(ra + (rb - ra) * t).toString(16).padStart(2, "0");
-    const g = Math.round(ga + (gb - ga) * t).toString(16).padStart(2, "0");
-    const bch = Math.round(ba + (bb - ba) * t).toString(16).padStart(2, "0");
-    return `#${r}${g}${bch}`;
-  };
+  // Lista de comunas para el panel inferior, ordenada desc por valor.
+  const comunasList = useMemo(() => {
+    if (!depsGeo) return [];
+    return depsGeo.features
+      .filter((f) => (f.properties as any)?.provincia_id === "02")
+      .map((f) => {
+        const props = f.properties as any;
+        return {
+          id: props.departamento_id as string,
+          nombre: (props.nombre as string) ?? props.departamento_id,
+          value: valoresDep.get(props.departamento_id) ?? 0,
+        };
+      })
+      .sort((a, b) => b.value - a.value);
+  }, [depsGeo, valoresDep]);
+
+  const maxValue = comunasList[0]?.value ?? 1;
 
   // Stats agregados de CABA (provincia "02").
-  const provIdx = useMemo(() => dataset.provincias.findIndex((p) => p.id === "02"), [dataset]);
+  const provIdx = useMemo(
+    () => dataset.provincias.findIndex((p) => p.id === "02"),
+    [dataset]
+  );
   const ai = useMemo(() => dataset.anios.indexOf(anio), [dataset, anio]);
   const isAll = delitoId === "all";
   const di = isAll ? -1 : dataset.delitos.findIndex((d) => d.id === delitoId);
-  const tasaCaba = isAll ? 0 : (di >= 0 ? dataset.prov_tasa[provIdx]?.[di]?.[ai] ?? 0 : 0);
+  const tasaCaba = isAll
+    ? 0
+    : di >= 0
+      ? dataset.prov_tasa[provIdx]?.[di]?.[ai] ?? 0
+      : 0;
   const hechosCaba = isAll
     ? totalProvincia(dataset, provIdx, ai, "hechos")
-    : (di >= 0 ? dataset.prov_hechos[provIdx]?.[di]?.[ai] ?? 0 : 0);
-  void valorProvincia;
-
-  // Lista ordenada desc.
-  const sortedList = useMemo(
-    () => [...comunas].sort((a, b) => b.value - a.value),
-    [comunas]
-  );
-  const maxValue = sortedList[0]?.value ?? 1;
+    : di >= 0
+      ? dataset.prov_hechos[provIdx]?.[di]?.[ai] ?? 0
+      : 0;
 
   const containerCls = isMobile
     ? "pointer-events-auto fixed inset-x-0 bottom-0 z-30 max-h-[88vh] overflow-y-auto rounded-t-2xl border-t border-amber-300/30 bg-black/92 px-5 pb-6 pt-3 backdrop-blur-md anim-fade-up"
-    : `pointer-events-auto absolute right-6 top-[100px] z-30 w-[380px] rounded-2xl border border-amber-300/30 bg-black/80 backdrop-blur-md anim-fade-up transition-all duration-300 ${collapsed ? "max-h-[64px] overflow-hidden" : "max-h-[calc(100vh-160px)]"}`;
+    : `pointer-events-auto absolute right-6 top-[100px] z-30 w-[400px] rounded-2xl border border-amber-300/30 bg-black/82 backdrop-blur-md anim-fade-up transition-all duration-300 ${collapsed ? "max-h-[64px] overflow-hidden" : "max-h-[calc(100vh-160px)] overflow-y-auto"}`;
 
   return (
     <div className={containerCls}>
       {/* === Header === */}
       <div className="flex items-start justify-between gap-2 px-5 pb-3 pt-4">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.22em] text-amber-300/85">Inset · Ciudad Autónoma</div>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-amber-300/85">
+            Inset · Ciudad Autónoma
+          </div>
           <div className="mt-0.5 headline text-[18px] leading-tight text-white">CABA</div>
         </div>
         <button
@@ -157,32 +129,83 @@ export default function CABAInset({
 
       {!collapsed && (
         <>
-          {/* === Mini-mapa SVG === */}
+          {/* === Mini-mapa MapGL real === */}
           <div className="px-5">
-            <div className="rounded-md border border-white/10 bg-black/40 p-2">
-              <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="block w-full h-auto">
-                {comunas.map((c) => {
-                  const intensity = intensities.get(c.id) ?? 0;
-                  const isHover = hoverComunaId === c.id;
-                  const isSel = selectedDepId === c.id;
-                  return (
-                    <path
-                      key={c.id}
-                      d={c.path}
-                      fill={colorFor(intensity)}
-                      fillOpacity={isSel ? 0.95 : isHover ? 0.88 : 0.78}
-                      stroke={isSel ? "#FFD04A" : isHover ? "#FFD04A" : "#06090F"}
-                      strokeWidth={isSel ? 1.6 : isHover ? 1.2 : 0.5}
-                      style={{ cursor: "pointer", transition: "fill-opacity 0.15s, stroke-width 0.15s" }}
-                      onMouseEnter={() => setHoverComunaId(c.id)}
-                      onMouseLeave={() => setHoverComunaId((cur) => (cur === c.id ? null : cur))}
-                      onClick={() => onSelectComuna(c.id)}
-                    >
-                      <title>{c.nombre}</title>
-                    </path>
-                  );
-                })}
-              </svg>
+            <div className="overflow-hidden rounded-md border border-white/10 bg-black/40">
+              <div style={{ width: "100%", height: 320 }}>
+                <MapGL
+                  initialViewState={{
+                    longitude: -58.444,
+                    latitude: -34.611,
+                    zoom: 10.6,
+                    pitch: 0,
+                    bearing: 0,
+                  }}
+                  mapStyle={INSET_STYLE}
+                  minZoom={10}
+                  maxZoom={13}
+                  maxBounds={[[-58.55, -34.72], [-58.32, -34.52]]}
+                  dragRotate={false}
+                  touchPitch={false}
+                  style={{ width: "100%", height: "100%", background: "#06090F" }}
+                  interactiveLayerIds={["caba-comunas-fill"]}
+                  cursor={hoverComunaId ? "pointer" : "default"}
+                  onMouseMove={(e) => {
+                    const id = (e.features?.[0]?.properties as any)?.departamento_id;
+                    setHoverComunaId(id ?? null);
+                  }}
+                  onMouseLeave={() => setHoverComunaId(null)}
+                  onClick={(e) => {
+                    const id = (e.features?.[0]?.properties as any)?.departamento_id;
+                    if (id) onSelectComuna(id);
+                  }}
+                >
+                  {comunasFC && (
+                    <Source id="caba-comunas" type="geojson" data={comunasFC}>
+                      <Layer
+                        id="caba-comunas-fill"
+                        type="fill"
+                        paint={{
+                          "fill-color": [
+                            "interpolate", ["linear"], ["get", "intensity"],
+                            0, "#3D4A66", 0.2, "#5C7FB0", 0.4, "#74ACDF",
+                            0.6, "#FFD04A", 0.8, "#F6B40E", 1, "#C03A18",
+                          ],
+                          "fill-opacity": [
+                            "case",
+                            ["==", ["get", "departamento_id"], selectedDepId ?? "__none__"], 0.95,
+                            ["==", ["get", "departamento_id"], hoverComunaId ?? "__none__"], 0.88,
+                            0.78,
+                          ],
+                        }}
+                      />
+                      <Layer
+                        id="caba-comunas-line"
+                        type="line"
+                        paint={{
+                          "line-color": "#06090F",
+                          "line-width": 0.8,
+                          "line-opacity": 0.6,
+                        }}
+                      />
+                      <Layer
+                        id="caba-comunas-active"
+                        type="line"
+                        paint={{
+                          "line-color": [
+                            "case",
+                            ["==", ["get", "departamento_id"], selectedDepId ?? "__none__"], "#FFD04A",
+                            ["==", ["get", "departamento_id"], hoverComunaId ?? "__none__"], "#FFD04A",
+                            "rgba(0,0,0,0)",
+                          ],
+                          "line-width": 1.8,
+                          "line-opacity": 1,
+                        }}
+                      />
+                    </Source>
+                  )}
+                </MapGL>
+              </div>
             </div>
           </div>
 
@@ -215,7 +238,7 @@ export default function CABAInset({
               <div className="text-[8.5px] uppercase tracking-[0.16em] text-white/35 mono">{anio}</div>
             </div>
             <ul className="space-y-2">
-              {sortedList.map((c) => {
+              {comunasList.map((c) => {
                 const isSel = selectedDepId === c.id;
                 const isHover = hoverComunaId === c.id;
                 const widthPct = maxValue > 0 ? (c.value / maxValue) * 100 : 0;

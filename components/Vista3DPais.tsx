@@ -55,6 +55,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   const [hoverProvId, setHoverProvId] = useState<string | null>(null);
   const [hoverDepId, setHoverDepId] = useState<string | null>(null);
   const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number } | null>(null);
+  const [hoverIsCaba, setHoverIsCaba] = useState(false);
   const [viewState, setViewState] = useState({
     longitude: -63.5, latitude: -38.5, zoom: 3.7, pitch: 0, bearing: 0,
   });
@@ -330,6 +331,15 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         touchPitch={false}
         onMouseMove={(e) => {
           const f = e.features?.[0];
+          // CABA highlight: hover over the dedicated polygon → flag y skip otros.
+          if (typeof f?.layer?.id === "string" && f.layer.id.startsWith("caba-highlight-")) {
+            setHoverIsCaba(true);
+            setHoverProvId(null);
+            setHoverDepId(null);
+            setHoverPoint(null);
+            return;
+          }
+          setHoverIsCaba(false);
           const props = f?.properties ?? {};
           const depId = (props.departamento_id as string | undefined) ?? null;
           setHoverDepId(depId);
@@ -342,10 +352,15 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             setHoverPoint(null);
           }
         }}
-        onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); setHoverPoint(null); }}
+        onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); setHoverPoint(null); setHoverIsCaba(false); }}
         onClick={(e) => {
           const f = e.features?.[0];
           const props = (f?.properties ?? {}) as any;
+          // Click sobre el highlight CABA → abre inset (sin drill-down).
+          if (typeof f?.layer?.id === "string" && f.layer.id.startsWith("caba-highlight-")) {
+            setCabaInset(true);
+            return;
+          }
           if (nivel === "pais") {
             const depId = props.departamento_id as string | undefined;
             if (!depId) return;
@@ -357,7 +372,11 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             selectDepartamento(depId === departamentoSel ? null : depId);
           }
         }}
-        interactiveLayerIds={["deps-fill"]}
+        interactiveLayerIds={
+          nivel === "pais"
+            ? ["caba-highlight-fill", "caba-highlight-line", "deps-fill"]
+            : ["deps-fill"]
+        }
         onLoad={() => {
           const m = mapRef.current?.getMap();
           if (!m) return;
@@ -375,7 +394,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           m.on("idle", once);
         }}
         style={{ height: "100%", width: "100%", background: DESK }}
-        cursor={(nivel === "pais" ? hoverProvId : hoverDepId) ? "pointer" : "default"}
+        cursor={(nivel === "pais" ? (hoverProvId || hoverIsCaba) : hoverDepId) ? "pointer" : "default"}
       >
         <NavigationControl position="bottom-left" visualizePitch={false} showCompass={false} showZoom />
 
@@ -503,9 +522,57 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           </Source>
         )}
 
-        {/* CABA: el dot/marker en el mapa no es viable a este zoom (las comunas
-            son tan chicas que clicks vecinos roban picking). El acceso a CABA
-            vive en el sidebar como botón explícito → setCabaInset(true). */}
+        {/* === CABA highlight: silueta REAL de la Ciudad con outline cobalt
+            grueso + fill cobalt translucido + label. Click en cualquier parte
+            del polígono abre el inset. Solo a nivel país. === */}
+        {nivel === "pais" && paisGeo && (() => {
+          const cabaFeature = paisGeo.features.find(
+            (f) => (f.properties as any)?.provincia_id === "02"
+          );
+          if (!cabaFeature) return null;
+          const cabaFC = { type: "FeatureCollection", features: [cabaFeature] } as any;
+          return (
+            <Source id="caba-highlight" type="geojson" data={cabaFC}>
+              <Layer
+                id="caba-highlight-fill"
+                type="fill"
+                paint={{
+                  "fill-color": "#74ACDF",
+                  "fill-opacity": hoverIsCaba ? 0.45 : 0.22,
+                }}
+              />
+              <Layer
+                id="caba-highlight-line"
+                type="line"
+                paint={{
+                  "line-color": hoverIsCaba ? "#FFD04A" : "#93C5F8",
+                  "line-width": hoverIsCaba ? 6 : 4,
+                  "line-opacity": 1,
+                  "line-blur": 0.5,
+                }}
+              />
+              <Layer
+                id="caba-highlight-label"
+                type="symbol"
+                layout={{
+                  "text-field": "CABA",
+                  "text-font": ["Open Sans Regular"],
+                  "text-size": 13,
+                  "text-offset": [0, -1.6],
+                  "text-anchor": "bottom",
+                  "text-letter-spacing": 0.18,
+                  "text-allow-overlap": true,
+                  "symbol-placement": "point",
+                }}
+                paint={{
+                  "text-color": "#93C5F8",
+                  "text-halo-color": "#06090F",
+                  "text-halo-width": 1.6,
+                }}
+              />
+            </Source>
+          );
+        })()}
 
         {/* Mask removida: el basemap minimal con background color "#06090F" ya cubre
             todo lo no-Argentina. Sin mask geojson → sin tessellation artifacts. */}
