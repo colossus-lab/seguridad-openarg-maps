@@ -17,6 +17,7 @@ import {
 import { loadPaisGeojson, loadDepartamentosAll } from "@/lib/data";
 import { computeIsobands, unionFeatureCollection } from "@/lib/isobands";
 import type { Dataset, Metric } from "@/lib/types";
+import CABAInset from "./CABAInset";
 
 // Estilo minimal: fondo desk plano, sin tiles externos. Argentina se dibuja
 // 100% desde nuestras geometrías → ningún artefacto de tessellation por mask
@@ -46,6 +47,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     delitoId, anio, metric,
     setDelito, setAnio, setMetric,
     selectProvincia, selectDepartamento, reset,
+    cabaInsetOpen, setCabaInset,
   } = useDashboard();
 
   const [paisGeo, setPaisGeo] = useState<GeoJSON.FeatureCollection | null>(null);
@@ -109,6 +111,10 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     const easeInOut = (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
     if (departamentoSel) {
+      // Si el inset CABA está abierto y la comuna seleccionada es de CABA,
+      // mantenemos vista nacional — el inset gestiona su propia cámara local.
+      const isCabaComuna = departamentoSel.startsWith("02") && cabaInsetOpen;
+      if (isCabaComuna) return;
       const f = depsGeo.features.find((x) => (x.properties as any).departamento_id === departamentoSel);
       const c = (f?.properties as any)?.centroid as [number, number] | undefined;
       if (c) {
@@ -143,7 +149,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         duration: 1200, easing: easeOut,
       });
     }
-  }, [provinciaSel, departamentoSel, paisGeo, depsGeo]);
+  }, [provinciaSel, departamentoSel, paisGeo, depsGeo, cabaInsetOpen, isMobile]);
 
   // Cleanup al desmontar
   useEffect(() => () => {
@@ -350,9 +356,9 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         onClick={(e) => {
           const f = e.features?.[0];
           const props = (f?.properties ?? {}) as any;
-          // CABA marker has its own click target.
+          // CABA marker abre el inset (no drill-down al mapa principal).
           if (f?.layer?.id === "caba-marker-dot" || f?.layer?.id === "caba-marker-halo") {
-            selectProvincia("02");
+            setCabaInset(true);
             return;
           }
           if (nivel === "pais") {
@@ -936,6 +942,23 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           metric={metric}
           anchorPx={depAnchorPx}
           onClose={() => selectDepartamento(null)}
+        />
+      )}
+
+      {/* === Inset CABA (mini-mapa flotante con las 15 comunas) === */}
+      {cabaInsetOpen && (
+        <CABAInset
+          dataset={dataset}
+          depsGeo={depsGeo}
+          valoresDep={valoresDep}
+          delitoId={delitoId}
+          anio={anio}
+          metric={metric}
+          isMobile={isMobile}
+          collapsed={!!departamentoSel && departamentoSel.startsWith("02")}
+          selectedDepId={departamentoSel}
+          onClose={() => setCabaInset(false)}
+          onSelectComuna={(id) => selectDepartamento(id)}
         />
       )}
     </div>
