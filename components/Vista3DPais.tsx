@@ -359,9 +359,13 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         dragRotate={false}
         touchPitch={false}
         onMouseMove={(e) => {
-          const f = e.features?.[0];
-          // CABA highlight: hover over the dedicated polygon → flag y skip otros.
-          if (typeof f?.layer?.id === "string" && f.layer.id.startsWith("caba-highlight-")) {
+          // Buscamos en TODO el array de features, no solo el [0]: el caba-highlight-hit
+          // tiene fill-opacity 0.001 y MapLibre puede devolver primero la comuna invisible
+          // de deps-fill que está debajo. Si hay CUALQUIER caba-highlight feature, gana.
+          const cabaFeat = e.features?.find(
+            (x) => typeof x?.layer?.id === "string" && x.layer.id.startsWith("caba-highlight-")
+          );
+          if (cabaFeat) {
             setHoverIsCaba(true);
             setHoverProvId(null);
             setHoverDepId(null);
@@ -369,6 +373,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             return;
           }
           setHoverIsCaba(false);
+          const f = e.features?.[0];
           const props = f?.properties ?? {};
           const depId = (props.departamento_id as string | undefined) ?? null;
           setHoverDepId(depId);
@@ -383,13 +388,16 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         }}
         onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); setHoverPoint(null); setHoverIsCaba(false); }}
         onClick={(e) => {
-          const f = e.features?.[0];
-          const props = (f?.properties ?? {}) as any;
-          // Click sobre el highlight CABA → abre inset (sin drill-down).
-          if (typeof f?.layer?.id === "string" && f.layer.id.startsWith("caba-highlight-")) {
+          // Igual que en hover: buscamos cualquier caba-highlight en el array completo.
+          const cabaFeat = e.features?.find(
+            (x) => typeof x?.layer?.id === "string" && x.layer.id.startsWith("caba-highlight-")
+          );
+          if (cabaFeat) {
             setCabaInset(true);
             return;
           }
+          const f = e.features?.[0];
+          const props = (f?.properties ?? {}) as any;
           if (nivel === "pais") {
             const depId = props.departamento_id as string | undefined;
             if (!depId) return;
