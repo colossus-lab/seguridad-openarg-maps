@@ -81,6 +81,31 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     loadDepartamentosAll().then(setDepsGeo).catch(console.error);
   }, []);
 
+  // onMapReady gating — fire SOLO cuando depsGeo/paisGeo están en estado React
+  // y los sources del mapa terminaron de procesar (idle event posterior).
+  //
+  // Fix race condition: el `idle` se gatillaba en onLoad con BASE_STYLE vacío,
+  // disparando setIntro("ready") antes de que el choropleth se renderizara.
+  // Resultado: mapa visualmente "roto" en primera carga; refresh lo arreglaba
+  // porque geomCache servía las geojsons sincrónicamente.
+  useEffect(() => {
+    if (!paisGeo || !depsGeo || !onMapReady) return;
+    const m = mapRef.current?.getMap();
+    if (!m) return;
+    let fired = false;
+    const fire = () => {
+      if (fired) return;
+      fired = true;
+      m.off("idle", fire);
+      onMapReady();
+    };
+    m.on("idle", fire);
+    // Safety: si por algún motivo idle no dispara (issues documentados con
+    // ciertos sources GeoJSON in-memory), forzamos onMapReady tras 4s.
+    const timeout = setTimeout(fire, 4000);
+    return () => { m.off("idle", fire); clearTimeout(timeout); };
+  }, [paisGeo, depsGeo, onMapReady]);
+
   // Resize defensivo.
   useEffect(() => {
     if (!wrapperRef.current) return;
@@ -208,33 +233,20 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     return { type: "FeatureCollection", features };
   }, [depsGeo, valoresDep]);
 
-  // CABA highlight FC — devolvemos DOS features:
-  //   1) el polígono real de CABA (con _kind=hit) → capa de hit-detection
-  //      invisible y generosa, atrapa clicks en toda la región CABA.
-  //   2) una Point feature en el centroide (con _kind=dot) → marker visual
-  //      (dot 14px en píxeles fijos + label "CABA") siempre visible.
-  // A zoom país (3.7) el polígono real ocupa ~15px → no sirve solo como visual,
-  // pero sí como zona de captura de clicks suficientemente amplia.
+  // CABA highlight FC — UNA Point feature en el centroide. El hit-test no se hace
+  // vía MapLibre features sino vía JS proximity guard en onClick/onMouseMove
+  // (bypass total del feature ordering quirks de MapLibre).
+  const CABA_CENTROID_LL: [number, number] = [-58.444, -34.611];
   const cabaHighlightFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
     if (!paisGeo) return null;
-    const cabaFeature = paisGeo.features.find(
-      (f) => (f.properties as any)?.provincia_id === "02"
-    );
-    if (!cabaFeature) return null;
-    const centroid = (cabaFeature.properties as any)?.centroid as [number, number] | undefined;
-    const features: GeoJSON.Feature[] = [{
-      type: "Feature",
-      geometry: cabaFeature.geometry,
-      properties: { provincia_id: "02", nombre: "CABA", _kind: "hit" },
-    }];
-    if (centroid) {
-      features.push({
+    return {
+      type: "FeatureCollection",
+      features: [{
         type: "Feature",
-        geometry: { type: "Point", coordinates: centroid },
-        properties: { provincia_id: "02", nombre: "CABA", _kind: "dot" },
-      });
-    }
-    return { type: "FeatureCollection", features };
+        geometry: { type: "Point", coordinates: CABA_CENTROID_LL },
+        properties: { provincia_id: "02", nombre: "CABA" },
+      }],
+    };
   }, [paisGeo]);
 
   // Polígono unión de las 24 provincias — se computa UNA sola vez al cargar paisGeo.
@@ -344,6 +356,16 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   void viewState; // dependencia implícita
   const provAnchorPx = provCentroid ? projectPx(provCentroid) : null;
   const depAnchorPx = depCentroid ? projectPx(depCentroid) : null;
+  // Centroide CABA en píxeles del viewport — depende de viewState (zoom/center).
+  // Usado para el proximity JS guard del click/hover (bypass del feature hit-test).
+  const cabaCentroidPx = projectPx(CABA_CENTROID_LL);
+  const CABA_HIT_RADIUS = 50; // px
+  const isNearCaba = (x: number, y: number): boolean => {
+    if (!cabaCentroidPx) return false;
+    const dx = x - cabaCentroidPx.x;
+    const dy = y - cabaCentroidPx.y;
+    return dx * dx + dy * dy < CABA_HIT_RADIUS * CABA_HIT_RADIUS;
+  };
 
   if (!dataset) return null;
 
@@ -359,13 +381,10 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         dragRotate={false}
         touchPitch={false}
         onMouseMove={(e) => {
-          // Buscamos en TODO el array de features, no solo el [0]: el caba-highlight-hit
-          // tiene fill-opacity 0.001 y MapLibre puede devolver primero la comuna invisible
-          // de deps-fill que está debajo. Si hay CUALQUIER caba-highlight feature, gana.
-          const cabaFeat = e.features?.find(
-            (x) => typeof x?.layer?.id === "string" && x.layer.id.startsWith("caba-highlight-")
-          );
-          if (cabaFeat) {
+          // Proximity JS guard: a nivel país, si el cursor está dentro del radio
+          // de 50px del centroide CABA, lo tratamos como hover CABA — bypass del
+          // feature hit-test de MapLibre (no depende de layer order, opacity, ni filter).
+          if (nivel === "pais" && e.point && isNearCaba(e.point.x, e.point.y)) {
             setHoverIsCaba(true);
             setHoverProvId(null);
             setHoverDepId(null);
@@ -388,11 +407,10 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         }}
         onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); setHoverPoint(null); setHoverIsCaba(false); }}
         onClick={(e) => {
-          // Igual que en hover: buscamos cualquier caba-highlight en el array completo.
-          const cabaFeat = e.features?.find(
-            (x) => typeof x?.layer?.id === "string" && x.layer.id.startsWith("caba-highlight-")
-          );
-          if (cabaFeat) {
+          // Proximity JS guard: a nivel país, click dentro de 50px del centroide
+          // CABA → abre inset directamente (no drill-down a BA aunque el feature
+          // bajo el cursor sea una comuna o un partido del Conurbano).
+          if (nivel === "pais" && e.point && isNearCaba(e.point.x, e.point.y)) {
             setCabaInset(true);
             return;
           }
@@ -409,11 +427,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             selectDepartamento(depId === departamentoSel ? null : depId);
           }
         }}
-        interactiveLayerIds={
-          nivel === "pais"
-            ? ["caba-highlight-hitzone", "caba-highlight-hit", "caba-highlight-dot", "deps-fill"]
-            : ["deps-fill"]
-        }
+        interactiveLayerIds={["deps-fill"]}
         onLoad={() => {
           const m = mapRef.current?.getMap();
           if (!m) return;
@@ -426,9 +440,10 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             padding: pad as any,
             duration: 0,
           });
-          if (!onMapReady) return;
-          const once = () => { m.off("idle", once); onMapReady(); };
-          m.on("idle", once);
+          // Nota: el listener `idle` para onMapReady se setupea en un useEffect
+          // separado gated por `depsEnriched` — acá no, porque `idle` dispara
+          // inmediatamente al cargar el BASE_STYLE (sin sources) y el intro fade
+          // out se gatillaría antes de que el choropleth aparezca.
         }}
         style={{ height: "100%", width: "100%", background: DESK }}
         cursor={(nivel === "pais" ? (hoverProvId || hoverIsCaba) : hoverDepId) ? "pointer" : "default"}
@@ -567,41 +582,16 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           </Source>
         )}
 
-        {/* === CABA highlight: hit-capture invisible sobre el polígono real +
-            dot ceremonial + label. El polígono atrapa clicks en toda la región;
-            el dot fijo en píxeles garantiza visibilidad a cualquier zoom. === */}
+        {/* === CABA highlight: dot ceremonial + label sobre el centroide.
+            El hit-test NO se hace acá — se hace en JS vía isNearCaba() en
+            onClick/onMouseMove con radio 50px alrededor del centroide. === */}
         {nivel === "pais" && cabaHighlightFC && (
           <Source id="caba-highlight" type="geojson" data={cabaHighlightFC}>
             <Layer
-              id="caba-highlight-hit"
-              type="fill"
-              filter={["==", ["get", "_kind"], "hit"]}
-              paint={{
-                "fill-color": "#C03A18",
-                "fill-opacity": hoverIsCaba ? 0.25 : 0.001,
-              }}
-            />
-            {/* Hit-zone circular generoso: 30px en píxeles fijos alrededor del
-                centroide. La silueta real de CABA ocupa ~50px de diámetro a zoom
-                país; este círculo extiende el target ~25px más allá del dot. */}
-            <Layer
-              id="caba-highlight-hitzone"
-              type="circle"
-              filter={["==", ["get", "_kind"], "dot"]}
-              paint={{
-                "circle-radius": 30,
-                "circle-color": "#C03A18",
-                "circle-opacity": hoverIsCaba ? 0.18 : 0.001,
-                "circle-stroke-width": 0,
-                "circle-pitch-alignment": "viewport",
-              }}
-            />
-            <Layer
               id="caba-highlight-dot"
               type="circle"
-              filter={["==", ["get", "_kind"], "dot"]}
               paint={{
-                "circle-radius": hoverIsCaba ? 16 : 14,
+                "circle-radius": hoverIsCaba ? 20 : 18,
                 "circle-color": "#C03A18",
                 "circle-stroke-color": hoverIsCaba ? "#FFD04A" : "#FFFFFF",
                 "circle-stroke-width": hoverIsCaba ? 4 : 3,
@@ -612,12 +602,11 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             <Layer
               id="caba-highlight-label"
               type="symbol"
-              filter={["==", ["get", "_kind"], "dot"]}
               layout={{
                 "text-field": "CABA",
                 "text-font": ["Open Sans Regular"],
                 "text-size": 13,
-                "text-offset": [0, -2.2],
+                "text-offset": [0, -2.6],
                 "text-anchor": "bottom",
                 "text-letter-spacing": 0.18,
                 "text-allow-overlap": true,
