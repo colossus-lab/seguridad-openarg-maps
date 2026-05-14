@@ -411,7 +411,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         }}
         interactiveLayerIds={
           nivel === "pais"
-            ? ["caba-highlight-hit", "caba-highlight-dot", "deps-fill"]
+            ? ["caba-highlight-hitzone", "caba-highlight-hit", "caba-highlight-dot", "deps-fill"]
             : ["deps-fill"]
         }
         onLoad={() => {
@@ -579,6 +579,21 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
               paint={{
                 "fill-color": "#C03A18",
                 "fill-opacity": hoverIsCaba ? 0.25 : 0.001,
+              }}
+            />
+            {/* Hit-zone circular generoso: 30px en píxeles fijos alrededor del
+                centroide. La silueta real de CABA ocupa ~50px de diámetro a zoom
+                país; este círculo extiende el target ~25px más allá del dot. */}
+            <Layer
+              id="caba-highlight-hitzone"
+              type="circle"
+              filter={["==", ["get", "_kind"], "dot"]}
+              paint={{
+                "circle-radius": 30,
+                "circle-color": "#C03A18",
+                "circle-opacity": hoverIsCaba ? 0.18 : 0.001,
+                "circle-stroke-width": 0,
+                "circle-pitch-alignment": "viewport",
               }}
             />
             <Layer
