@@ -208,24 +208,33 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     return { type: "FeatureCollection", features };
   }, [depsGeo, valoresDep]);
 
-  // CABA highlight FC — devolvemos UNA Point feature en el centroide de CABA.
-  // A zoom país (3.7) el polígono real ocupa ~15px y se pierde; un dot en píxeles
-  // fijos es ceremonial, legible y siempre clickeable.
+  // CABA highlight FC — devolvemos DOS features:
+  //   1) el polígono real de CABA (con _kind=hit) → capa de hit-detection
+  //      invisible y generosa, atrapa clicks en toda la región CABA.
+  //   2) una Point feature en el centroide (con _kind=dot) → marker visual
+  //      (dot 14px en píxeles fijos + label "CABA") siempre visible.
+  // A zoom país (3.7) el polígono real ocupa ~15px → no sirve solo como visual,
+  // pero sí como zona de captura de clicks suficientemente amplia.
   const cabaHighlightFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
     if (!paisGeo) return null;
     const cabaFeature = paisGeo.features.find(
       (f) => (f.properties as any)?.provincia_id === "02"
     );
-    const centroid = (cabaFeature?.properties as any)?.centroid as [number, number] | undefined;
-    if (!centroid) return null;
-    return {
-      type: "FeatureCollection",
-      features: [{
+    if (!cabaFeature) return null;
+    const centroid = (cabaFeature.properties as any)?.centroid as [number, number] | undefined;
+    const features: GeoJSON.Feature[] = [{
+      type: "Feature",
+      geometry: cabaFeature.geometry,
+      properties: { provincia_id: "02", nombre: "CABA", _kind: "hit" },
+    }];
+    if (centroid) {
+      features.push({
         type: "Feature",
         geometry: { type: "Point", coordinates: centroid },
-        properties: { provincia_id: "02", nombre: "CABA" },
-      }],
-    };
+        properties: { provincia_id: "02", nombre: "CABA", _kind: "dot" },
+      });
+    }
+    return { type: "FeatureCollection", features };
   }, [paisGeo]);
 
   // Polígono unión de las 24 provincias — se computa UNA sola vez al cargar paisGeo.
@@ -394,7 +403,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         }}
         interactiveLayerIds={
           nivel === "pais"
-            ? ["caba-highlight-dot", "deps-fill"]
+            ? ["caba-highlight-hit", "caba-highlight-dot", "deps-fill"]
             : ["deps-fill"]
         }
         onLoad={() => {
@@ -550,13 +559,24 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           </Source>
         )}
 
-        {/* === CABA highlight: dot ceremonial sobre el centroide de la Ciudad,
-            tamaño fijo en píxeles → siempre visible y clickeable a zoom país. === */}
+        {/* === CABA highlight: hit-capture invisible sobre el polígono real +
+            dot ceremonial + label. El polígono atrapa clicks en toda la región;
+            el dot fijo en píxeles garantiza visibilidad a cualquier zoom. === */}
         {nivel === "pais" && cabaHighlightFC && (
           <Source id="caba-highlight" type="geojson" data={cabaHighlightFC}>
             <Layer
+              id="caba-highlight-hit"
+              type="fill"
+              filter={["==", ["get", "_kind"], "hit"]}
+              paint={{
+                "fill-color": "#C03A18",
+                "fill-opacity": hoverIsCaba ? 0.25 : 0.001,
+              }}
+            />
+            <Layer
               id="caba-highlight-dot"
               type="circle"
+              filter={["==", ["get", "_kind"], "dot"]}
               paint={{
                 "circle-radius": hoverIsCaba ? 16 : 14,
                 "circle-color": "#C03A18",
@@ -569,6 +589,7 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             <Layer
               id="caba-highlight-label"
               type="symbol"
+              filter={["==", ["get", "_kind"], "dot"]}
               layout={{
                 "text-field": "CABA",
                 "text-font": ["Open Sans Regular"],
