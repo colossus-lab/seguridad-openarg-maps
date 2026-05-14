@@ -3,6 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import MapGL, {
   Layer,
+  Marker,
   NavigationControl,
   Source,
   type MapRef,
@@ -233,21 +234,8 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
     return { type: "FeatureCollection", features };
   }, [depsGeo, valoresDep]);
 
-  // CABA highlight FC — UNA Point feature en el centroide. El hit-test no se hace
-  // vía MapLibre features sino vía JS proximity guard en onClick/onMouseMove
-  // (bypass total del feature ordering quirks de MapLibre).
-  const CABA_CENTROID_LL: [number, number] = [-58.444, -34.611];
-  const cabaHighlightFC = useMemo<GeoJSON.FeatureCollection | null>(() => {
-    if (!paisGeo) return null;
-    return {
-      type: "FeatureCollection",
-      features: [{
-        type: "Feature",
-        geometry: { type: "Point", coordinates: CABA_CENTROID_LL },
-        properties: { provincia_id: "02", nombre: "CABA" },
-      }],
-    };
-  }, [paisGeo]);
+  // CABA: el marker HTML (componente <Marker> de react-map-gl) maneja todo —
+  // posición, click y hover. Sin Source/Layer ni proximity guards.
 
   // Polígono unión de las 24 provincias — se computa UNA sola vez al cargar paisGeo.
   // turf.union sobre 24 features cuesta ~150-200ms, antes corría en cada compute de
@@ -356,16 +344,6 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
   void viewState; // dependencia implícita
   const provAnchorPx = provCentroid ? projectPx(provCentroid) : null;
   const depAnchorPx = depCentroid ? projectPx(depCentroid) : null;
-  // Centroide CABA en píxeles del viewport — depende de viewState (zoom/center).
-  // Usado para el proximity JS guard del click/hover (bypass del feature hit-test).
-  const cabaCentroidPx = projectPx(CABA_CENTROID_LL);
-  const CABA_HIT_RADIUS = 50; // px
-  const isNearCaba = (x: number, y: number): boolean => {
-    if (!cabaCentroidPx) return false;
-    const dx = x - cabaCentroidPx.x;
-    const dy = y - cabaCentroidPx.y;
-    return dx * dx + dy * dy < CABA_HIT_RADIUS * CABA_HIT_RADIUS;
-  };
 
   if (!dataset) return null;
 
@@ -381,17 +359,8 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         dragRotate={false}
         touchPitch={false}
         onMouseMove={(e) => {
-          // Proximity JS guard: a nivel país, si el cursor está dentro del radio
-          // de 50px del centroide CABA, lo tratamos como hover CABA — bypass del
-          // feature hit-test de MapLibre (no depende de layer order, opacity, ni filter).
-          if (nivel === "pais" && e.point && isNearCaba(e.point.x, e.point.y)) {
-            setHoverIsCaba(true);
-            setHoverProvId(null);
-            setHoverDepId(null);
-            setHoverPoint(null);
-            return;
-          }
-          setHoverIsCaba(false);
+          // CABA: el marker HTML maneja su propio hover via onMouseEnter/Leave.
+          // Acá solo lidiamos con features del map (deptos).
           const f = e.features?.[0];
           const props = f?.properties ?? {};
           const depId = (props.departamento_id as string | undefined) ?? null;
@@ -405,15 +374,9 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
             setHoverPoint(null);
           }
         }}
-        onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); setHoverPoint(null); setHoverIsCaba(false); }}
+        onMouseLeave={() => { setHoverProvId(null); setHoverDepId(null); setHoverPoint(null); }}
         onClick={(e) => {
-          // Proximity JS guard: a nivel país, click dentro de 50px del centroide
-          // CABA → abre inset directamente (no drill-down a BA aunque el feature
-          // bajo el cursor sea una comuna o un partido del Conurbano).
-          if (nivel === "pais" && e.point && isNearCaba(e.point.x, e.point.y)) {
-            setCabaInset(true);
-            return;
-          }
+          // CABA: el marker HTML lo maneja con su propio onClick.
           const f = e.features?.[0];
           const props = (f?.properties ?? {}) as any;
           if (nivel === "pais") {
@@ -582,43 +545,67 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
           </Source>
         )}
 
-        {/* === CABA highlight: dot ceremonial + label sobre el centroide.
-            El hit-test NO se hace acá — se hace en JS vía isNearCaba() en
-            onClick/onMouseMove con radio 50px alrededor del centroide. === */}
-        {nivel === "pais" && cabaHighlightFC && (
-          <Source id="caba-highlight" type="geojson" data={cabaHighlightFC}>
-            <Layer
-              id="caba-highlight-dot"
-              type="circle"
-              paint={{
-                "circle-radius": hoverIsCaba ? 20 : 18,
-                "circle-color": "#C03A18",
-                "circle-stroke-color": hoverIsCaba ? "#FFD04A" : "#FFFFFF",
-                "circle-stroke-width": hoverIsCaba ? 4 : 3,
-                "circle-opacity": 1,
-                "circle-pitch-alignment": "viewport",
+        {/* === CABA marker: elemento HTML real con click handler propio.
+            Se renderiza a nivel país Y cuando provinciaSel="06" (BA rodea
+            geográficamente a CABA, ahí es donde el usuario tiende a quedar
+            atrapado por drill-down accidental). Es un DOM element — el click
+            NO depende del feature hit-test de MapLibre. Imposible de fallar. === */}
+        {(nivel === "pais" || provinciaSel === "06") && (
+          <Marker longitude={-58.444} latitude={-34.611} anchor="center">
+            <button
+              type="button"
+              aria-label="Abrir Ciudad Autónoma de Buenos Aires"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCabaInset(true);
               }}
-            />
-            <Layer
-              id="caba-highlight-label"
-              type="symbol"
-              layout={{
-                "text-field": "CABA",
-                "text-font": ["Open Sans Regular"],
-                "text-size": 13,
-                "text-offset": [0, -2.6],
-                "text-anchor": "bottom",
-                "text-letter-spacing": 0.18,
-                "text-allow-overlap": true,
-                "symbol-placement": "point",
+              onMouseEnter={() => setHoverIsCaba(true)}
+              onMouseLeave={() => setHoverIsCaba(false)}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 4,
+                padding: 0,
+                margin: 0,
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                userSelect: "none",
+                pointerEvents: "auto",
               }}
-              paint={{
-                "text-color": "#93C5F8",
-                "text-halo-color": "#06090F",
-                "text-halo-width": 1.6,
-              }}
-            />
-          </Source>
+            >
+              <span
+                style={{
+                  fontFamily: "var(--font-inter), system-ui, sans-serif",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.18em",
+                  color: "#93C5F8",
+                  textShadow: "0 0 4px #06090F, 0 0 4px #06090F",
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap",
+                  marginBottom: 2,
+                }}
+              >
+                CABA
+              </span>
+              <span
+                style={{
+                  display: "block",
+                  width: hoverIsCaba ? 44 : 38,
+                  height: hoverIsCaba ? 44 : 38,
+                  borderRadius: "50%",
+                  background: "#C03A18",
+                  border: `${hoverIsCaba ? 4 : 3}px solid ${hoverIsCaba ? "#FFD04A" : "#FFFFFF"}`,
+                  boxShadow: hoverIsCaba
+                    ? "0 0 0 6px rgba(246,180,14,0.25), 0 4px 16px rgba(0,0,0,0.55)"
+                    : "0 0 0 8px rgba(192,58,24,0.18), 0 2px 10px rgba(0,0,0,0.5)",
+                  transition: "all 160ms ease-out",
+                }}
+              />
+            </button>
+          </Marker>
         )}
 
         {/* Mask removida: el basemap minimal con background color "#06090F" ya cubre
