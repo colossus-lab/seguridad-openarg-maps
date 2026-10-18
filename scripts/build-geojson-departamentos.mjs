@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as turf from "@turf/turf";
+import { IGN_TO_SNIC } from "./lib/ids.mjs";
 
 const IN = path.join(process.cwd(), "scripts", "tmp", "departamentos-raw.geojson");
 const OUT_DIR = path.join(process.cwd(), "public", "data", "departamentos");
@@ -49,8 +50,10 @@ function main() {
   // Agrupar por provincia_id.
   const byProv = new Map();
   for (const f of fc.features) {
-    // IGN: in1 = id INDEC (5 dígitos), nam = nombre.
-    const id = pad5(f.properties.in1 ?? f.properties.id);
+    // IGN: in1 = id INDEC (5 dígitos), nam = nombre. Se renombra a código SNIC
+    // (clave del dataset) cuando difieren — ver scripts/lib/ids.mjs.
+    const ignId = pad5(f.properties.in1 ?? f.properties.id);
+    const id = IGN_TO_SNIC[ignId] ?? ignId;
     const provId = pad2(id.slice(0, 2));
     const nombre = f.properties.nam ?? f.properties.fna ?? f.properties.nombre;
     // Douglas-Peucker — tolerancia más fina que provincias (~0.003° ≈ 330m).

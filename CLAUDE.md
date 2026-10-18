@@ -26,7 +26,7 @@ node scripts/build-hexgrid-pais.mjs            # Coarse country hexgrid (HEX_KM 
 node scripts/build-hexgrid-provincia.mjs       # Fine hexgrid per province
 ```
 
-The data CSVs live at `C:/Users/dante/Desktop/Laboratorio Colossus/Pipeline OpenArg/datos_abiertos/datasets/seguridad/` (paths hardcoded in `scripts/build-data.mjs`; override via `SNIC_DEPT` / `SNIC_VIALES` env vars).
+The data CSVs live at `C:/Users/dante/Desktop/Laboratorio Colossus/Pipelines de datos/Pipeline OpenArg/datos_abiertos/datasets/seguridad/` (paths hardcoded in `scripts/build-data.mjs`; override via `SNIC_DEPT` / `SNIC_VIALES` env vars).
 
 Large geometry transforms need `node --max-old-space-size=8192` (the raw IGN files are 100+ MB).
 
@@ -107,6 +107,7 @@ Identical to "Mapa Inseguridad Conurbano":
 - All map-rendered code lives in `components/Vista3DPais.tsx` — do not split it without coordinating the memo chain
 - Per-province data lazy-loads through `lib/data.ts` which caches in a module-scope `Map`. Always go through these helpers; do not call `fetch` directly from components
 - IDs are zero-padded INDEC codes: provincias 2 digits (`"06"`), departamentos 5 digits (`"06028"`). The dataset relies on these as primary keys
+- IGN and SNIC departamento codes differ in a few places (CABA comunas, Chascomús, Río Grande, Ushuaia), and SNIC changed Quilmes's code mid-series. `scripts/lib/ids.mjs` holds both crosswalks: geometries are renamed to SNIC codes, SNIC aliases are merged. Add new mismatches there, never in components
 - The viales dataset comes in row-per-person format (víctimas+imputados). Hechos are deduplicated by `id_hecho` Set in build-data
 - `nivel === "pais"` should always have `provinciaSel === null`; `selectProvincia(id)` is the only correct way to transition
 - Do not edit `public/data/*` by hand — regenerate via the pipeline
