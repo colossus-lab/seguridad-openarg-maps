@@ -16,7 +16,9 @@ npx tsc --noEmit          # Type-check (no test runner in this project)
 
 # Data pipeline (ETL → public/data/*)
 npm run data:fetch-geom   # One-time: download provincia/departamento polygons from IGN WFS to scripts/tmp/ (~240 MB raw)
-npm run data:build        # Run all build-* scripts in sequence: data → geojson → hexgrids
+npm run data:build        # Run all build-* scripts in sequence: data → geojson → VR maqueta
+npm run data:vr           # Only the /vr maqueta (public/data/vr/*)
+npm run data:vr-font      # Regenerate MSDF fonts for /vr (needs Python fonttools + brotli)
 
 # Or run individual stages:
 node scripts/build-data.mjs                    # SNIC CSVs + Viales SAT → pais.json
@@ -94,6 +96,15 @@ The hexgrid generator assigns each cell to a province by `booleanPointInPolygon`
 
 Tierra del Fuego currently emits an oversized hexgrid (~1.6 MB) because IGN's polygon includes the claimed Antarctic territory. Not yet clipped.
 
+## /vr — WebXR maqueta
+
+Separate route (`app/vr`) with a React Three Fiber + @react-three/xr scene for Meta Quest (AR passthrough / VR) and desktop. Everything lives in `components/vr/` (see its README for testing on the Quest). The 3D bundle is loaded via `next/dynamic` with `ssr: false` only on that route — never import three/R3F from the 2D dashboard.
+
+- Data comes from `scripts/build-vr.mjs` → `public/data/vr/` (meta.json + hashed .bin files), loaded through `loadVRBundle()` in `lib/data.ts`
+- The map is one mesh with a custom GLSL3 shader; per-departamento height/color/state live in a N×1 float DataTexture. Picking uses a BVH copy of the geometry. Do not split it into per-department meshes
+- uikit panels use the generated Familjen Grotesk MSDF in `public/vr/fonts/` (the bundled uikit fonts lack accents)
+- The IWER emulator is injected by `components/vr/emulador.ts` (dev + localhost only), not by @react-three/xr
+
 ## Design system
 
 Identical to "Mapa Inseguridad Conurbano":
@@ -104,7 +115,7 @@ Identical to "Mapa Inseguridad Conurbano":
 
 ## Conventions
 
-- All map-rendered code lives in `components/Vista3DPais.tsx` — do not split it without coordinating the memo chain
+- All 2D map-rendered code lives in `components/Vista3DPais.tsx` — do not split it without coordinating the memo chain (the /vr scene is separate, in `components/vr/`)
 - Per-province data lazy-loads through `lib/data.ts` which caches in a module-scope `Map`. Always go through these helpers; do not call `fetch` directly from components
 - IDs are zero-padded INDEC codes: provincias 2 digits (`"06"`), departamentos 5 digits (`"06028"`). The dataset relies on these as primary keys
 - IGN and SNIC departamento codes differ in a few places (CABA comunas, Chascomús, Río Grande, Ushuaia), and SNIC changed Quilmes's code mid-series. `scripts/lib/ids.mjs` holds both crosswalks: geometries are renamed to SNIC codes, SNIC aliases are merged. Add new mismatches there, never in components

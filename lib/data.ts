@@ -1,4 +1,4 @@
-import type { Dataset } from "./types";
+import type { Dataset, VRBundle, VRMeta } from "./types";
 
 let cachedDataset: Dataset | null = null;
 const geomCache = new Map<string, GeoJSON.FeatureCollection>();
@@ -60,4 +60,25 @@ export async function loadDepartamentosAll(
   const fc: GeoJSON.FeatureCollection = JSON.parse(new TextDecoder("utf-8").decode(buf));
   geomCache.set("deps-all", fc);
   return fc;
+}
+
+let vrBundle: Promise<VRBundle> | null = null;
+
+/** Datos de la maqueta /vr. meta.json se revalida; los .bin llevan hash (immutable). */
+export function loadVRBundle(): Promise<VRBundle> {
+  if (vrBundle) return vrBundle;
+  vrBundle = (async () => {
+    const res = await fetch("/data/vr/meta.json", { cache: "no-cache" });
+    if (!res.ok) throw new Error(`No pude cargar vr/meta.json: ${res.status}`);
+    const meta: VRMeta = await res.json();
+    const bin = async (name: string) => {
+      const r = await fetch(`/data/vr/${name}`);
+      if (!r.ok) throw new Error(`No pude cargar vr/${name}: ${r.status}`);
+      return new Uint16Array(await r.arrayBuffer());
+    };
+    const [geom, values] = await Promise.all([bin(meta.files.geom), bin(meta.files.values)]);
+    return { meta, geom, values };
+  })();
+  vrBundle.catch(() => { vrBundle = null; });
+  return vrBundle;
 }
