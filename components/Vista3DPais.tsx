@@ -1,6 +1,7 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import MapGL, {
   Layer,
   Marker,
@@ -651,9 +652,14 @@ export default function Vista3DPais({ onMapReady }: Vista3DPaisProps = {}) {
         />
       )}
 
-      {/* === Header nav: desktop muestra los dos chips, mobile sólo Fuente SNIC === */}
+      {/* === Header nav: desktop muestra los tres chips, mobile sólo Fuente SNIC ===
+          (3D / VR apunta al navegador del Meta Quest, que usa ancho desktop; en mobile
+          taparía la tarjeta de filtros) */}
       <div className="pointer-events-none absolute right-0 top-0 z-40">
         <nav className="pointer-events-auto flex items-center gap-2 px-4 py-3 md:px-6 md:py-4">
+          <Link href="/vr" className="hidden rounded-full border border-[#FFD04A] bg-[#FFD04A] px-3.5 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-[#06090F] transition hover:bg-[#FFE07A] md:inline-block">
+            Ver en 3D / VR
+          </Link>
           <a href="https://www.colossuslab.org" target="_blank" rel="noreferrer" className="hidden rounded-full border border-white/10 bg-black/55 px-3.5 py-1.5 text-[10.5px] uppercase tracking-[0.18em] text-white/65 backdrop-blur-md transition hover:text-white md:inline-block">
             colossuslab.org
           </a>
