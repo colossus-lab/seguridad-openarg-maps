@@ -4,8 +4,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
+import { SNIC_ALIASES } from "./lib/ids.mjs";
 
-const SEG = "C:/Users/dante/Desktop/Laboratorio Colossus/Pipeline OpenArg/datos_abiertos/datasets/seguridad";
+const SEG = "C:/Users/dante/Desktop/Laboratorio Colossus/Pipelines de datos/Pipeline OpenArg/datos_abiertos/datasets/seguridad";
 const CSV_DEPT = process.env.SNIC_DEPT ?? `${SEG}/seguridad-snic-departamental-estadisticas-criminales-republica-argentina-por-departamentos/estadísticas-criminales-en-la-república-argentina-por-departamentos-(panel)-(.csv).csv`;
 const CSV_VIALES = process.env.SNIC_VIALES ?? `${SEG}/seguridad-muertes-viales-sistema-alerta-temprana-estadisticas-criminales-republica-argentina/hechos-y-víctimas-de-muertes-viales-en-la-república-argentina.-total-nacional-(panel)-(.csv).csv`;
 
@@ -123,7 +124,7 @@ async function readSnicDepartamental() {
     if (!PROVINCIA_IDX.has(provId)) continue;
     const depRaw = cols[idx.departamento_id];
     if (!depRaw) continue;
-    const depId = pad5(depRaw);
+    const depId = SNIC_ALIASES[pad5(depRaw)] ?? pad5(depRaw);
 
     const snicId = cols[idx.codigo_delito_snic_id];
     const parent = parentDelitoId(snicId);
@@ -152,12 +153,18 @@ async function readSnicDepartamental() {
     let byAnio = depEntry.get(parent);
     if (!byAnio) { byAnio = new Map(); depEntry.set(parent, byAnio); }
     let entry = byAnio.get(anio);
-    if (!entry) { entry = { h: 0, vM: 0, vF: 0, vSD: 0, tSum: 0, tN: 0 }; byAnio.set(anio, entry); }
-    entry.h += hechos;
+    if (!entry) {
+      entry = { hP: 0, tP: 0, nP: 0, hS: 0, tS: 0, vM: 0, vF: 0, vSD: 0 };
+      byAnio.set(anio, entry);
+    }
+    // Fila madre ("15") vs subcódigos ("21_3"). Todas las filas de un depto/año comparten
+    // denominador poblacional, así que hechos y tasas se suman. Si existe la fila madre
+    // (pocos casos), los subcódigos son su desglose y se descartan para no contar doble.
+    if (snicId.includes("_")) { entry.hS += hechos; entry.tS += tasa; }
+    else { entry.hP += hechos; entry.tP += tasa; entry.nP += 1; }
     entry.vM += vM;
     entry.vF += vF;
     entry.vSD += vSD;
-    if (tasa > 0) { entry.tSum += tasa; entry.tN += 1; }
 
     keptCount++;
   }
@@ -197,7 +204,7 @@ async function readViales() {
 
     const provId = pad2(provRaw);
     if (!PROVINCIA_IDX.has(provId)) continue;
-    const depId = pad5(depRaw);
+    const depId = SNIC_ALIASES[pad5(depRaw)] ?? pad5(depRaw);
 
     let byA = hechosUnicos.get(depId);
     if (!byA) { byA = new Map(); hechosUnicos.set(depId, byA); }
@@ -292,13 +299,14 @@ async function main() {
         byAnio.forEach((entry, anio) => {
           const ai = anioIdx.get(anio);
           if (ai == null) return;
-          dep_hechos[dpi][di][ai] = entry.h;
-          const tasa = entry.tN > 0 ? +(entry.tSum / entry.tN).toFixed(2) : 0;
+          const h = entry.nP > 0 ? entry.hP : entry.hS;
+          dep_hechos[dpi][di][ai] = h;
+          const tasa = +(entry.nP > 0 ? entry.tP : entry.tS).toFixed(2);
           dep_tasa[dpi][di][ai] = tasa;
-          prov_hechos[pi][di][ai] += entry.h;
-          if (tasa > 0 && entry.h > 0) {
-            prov_tasa_w[pi][di][ai] += tasa * entry.h;
-            prov_tasa_h[pi][di][ai] += entry.h;
+          prov_hechos[pi][di][ai] += h;
+          if (tasa > 0 && h > 0) {
+            prov_tasa_w[pi][di][ai] += tasa * h;
+            prov_tasa_h[pi][di][ai] += h;
           } else if (tasa > 0) {
             prov_tasa_w[pi][di][ai] += tasa;
             prov_tasa_h[pi][di][ai] += 1;
